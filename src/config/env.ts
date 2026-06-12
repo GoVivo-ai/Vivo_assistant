@@ -29,6 +29,10 @@ const envSchema = z
       .string()
       .min(32, 'TOKEN_ENCRYPTION_KEY must be at least 32 characters (use: openssl rand -hex 32)'),
 
+    // Password for the /admin activity dashboard (Basic Auth, user "admin").
+    // If unset, the dashboard is disabled.
+    ADMIN_DASHBOARD_KEY: z.string().min(8).optional(),
+
     COMPANY_TIMEZONE: z.string().default('America/Bogota'),
   })
   .superRefine((val, ctx) => {

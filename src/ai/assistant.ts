@@ -117,18 +117,22 @@ export async function handleAssistantQuery(
       }
 
       case 'help':
+        await logAudit({ userId: user.id, action: 'help', query: text, status: 'success' });
         return helpText(lang);
 
       case 'chat': {
         const connections = await listConnections(user.id);
-        return generateChatReply(text, lang, {
+        const reply = await generateChatReply(text, lang, {
           name: user.name,
           googleConnected: connections.some((c) => c.provider === 'google'),
           clickupConnected: connections.some((c) => c.provider === 'clickup'),
         });
+        await logAudit({ userId: user.id, action: 'chat', query: text, status: 'success' });
+        return reply;
       }
 
       case 'unknown':
+        await logAudit({ userId: user.id, action: 'unknown', query: text, status: 'empty' });
         return t(lang).unknown;
     }
   } catch (err) {
