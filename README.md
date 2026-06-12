@@ -104,7 +104,16 @@ Use the generated `https://xxxx.ngrok-free.app` URL as:
 - `CLICKUP_REDIRECT_URI=https://xxxx.ngrok-free.app/oauth/clickup/callback` (also update it in ClickUp)
 - In HTTP mode (no `SLACK_APP_TOKEN`), also set Slack Request URLs to `https://xxxx.ngrok-free.app/slack/events`. In Socket Mode this is not needed.
 
-## 7. Run with Docker
+## 7. OAuth callbacks on Vercel (stable URL, no ngrok)
+
+The repo includes `api/index.ts` + `vercel.json`: Vercel serves **only** the stateless OAuth callbacks (`/oauth/google/callback`, `/oauth/clickup/callback`) and writes the encrypted tokens to the shared database. The bot itself is a long-lived Socket Mode process and **cannot run on Vercel** — keep it running locally or on a server.
+
+1. Create a Vercel project connected to this repo (every push to `main` deploys).
+2. In *Settings → Environment Variables*, paste your entire local `.env` (Vercel parses multi-line pastes). `TOKEN_ENCRYPTION_KEY` and `DATABASE_URL` **must be identical** to the ones the bot uses, otherwise the bot can't decrypt the stored tokens.
+3. Use `https://<project>.vercel.app/oauth/google/callback` and `.../oauth/clickup/callback` as redirect URIs in Google Cloud Console and ClickUp, and set `APP_BASE_URL=https://<project>.vercel.app` everywhere.
+4. Redeploy after changing env vars.
+
+## 8. Run with Docker
 
 ```bash
 docker compose up --build
