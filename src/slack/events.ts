@@ -3,10 +3,10 @@ import type { GenericMessageEvent } from '@slack/bolt';
 import type { WebClient } from '@slack/web-api';
 import { handleAssistantQuery } from '../ai/assistant';
 import type { SlackProfile } from '../services/userService';
-import { GENERIC_ERROR_TEXT } from '../utils/formatters';
+import { t } from '../utils/formatters';
 
 const EMPTY_PROMPT_TEXT =
-  'Hi! Ask me about your Drive files, calendar or ClickUp tasks. Try `/vivo-help` for examples.';
+  'Hi! Ask me about your Drive files, calendar or ClickUp tasks — in English o en español. Try `/vivo-help` for examples.';
 
 async function fetchProfile(client: WebClient, userId: string): Promise<SlackProfile | undefined> {
   // Best-effort enrichment (requires users:read).
@@ -41,7 +41,7 @@ async function answer(
     await say({ text: reply, thread_ts: threadTs });
   } catch (err) {
     console.error('[events] assistant query failed:', (err as Error).message);
-    await say({ text: GENERIC_ERROR_TEXT, thread_ts: threadTs });
+    await say({ text: t('en').genericError, thread_ts: threadTs });
   }
 }
 

@@ -14,6 +14,7 @@ export async function getCalendarEvents(
   range: CalendarRange,
   startDate?: string,
   endDate?: string,
+  lang: 'es' | 'en' = 'en',
 ): Promise<{ events: CalendarEventItem[]; rangeLabel: string }> {
   const accessToken = await getGoogleAccessToken(userId);
 
@@ -21,7 +22,7 @@ export async function getCalendarEvents(
   auth.setCredentials({ access_token: accessToken });
   const calendar = google.calendar({ version: 'v3', auth });
 
-  const dateRange = resolveDateRange(range, startDate, endDate);
+  const dateRange = resolveDateRange(range, startDate, endDate, lang);
 
   const response = await calendar.events.list({
     calendarId: 'primary',

@@ -4,16 +4,18 @@ import { getGoogleAuthUrl } from '../oauth/googleOAuth';
 import { getClickUpAuthUrl } from '../oauth/clickupOAuth';
 import { getUser } from '../services/userService';
 import { deleteConnections, listConnections } from '../services/connectionService';
-import { HELP_TEXT } from '../utils/formatters';
+import { helpText } from '../utils/formatters';
 import type { ProviderName } from '../types';
 
 const COMMAND_ERROR_TEXT =
   'Something went wrong running that command. Please try again in a moment.';
 
 export function registerCommands(app: App): void {
-  app.command('/vivo-help', async ({ ack, respond }) => {
+  app.command('/vivo-help', async ({ ack, respond, command }) => {
     await ack();
-    await respond({ response_type: 'ephemeral', text: HELP_TEXT });
+    // Slash commands carry no language signal; "es"/"español" as argument switches.
+    const lang = /^(es|español|espanol)$/i.test(command.text.trim()) ? 'es' : 'en';
+    await respond({ response_type: 'ephemeral', text: helpText(lang) });
   });
 
   app.command('/vivo-connect', async ({ ack, respond, command }) => {

@@ -1,4 +1,5 @@
-import { routeIntent } from './intentRouter';
+import { callModel, routeIntent, type Lang } from './intentRouter';
+import { chatSystemPrompt } from './prompts';
 import { searchDriveFiles } from '../tools/googleDrive';
 import { getCalendarEvents } from '../tools/googleCalendar';
 import { getMyClickUpTasks, searchClickUpTasks } from '../tools/clickup';
@@ -10,15 +11,24 @@ import {
   ReconnectRequiredError,
 } from '../types';
 import {
-  GENERIC_ERROR_TEXT,
-  HELP_TEXT,
-  UNKNOWN_TEXT,
   connectPrompt,
   formatCalendarResults,
   formatClickUpTasks,
   formatDriveResults,
+  helpText,
   reconnectPrompt,
+  t,
 } from '../utils/formatters';
+
+async function generateChatReply(text: string, lang: Lang): Promise<string> {
+  try {
+    const reply = (await callModel(chatSystemPrompt(lang), text, { maxTokens: 200 })).trim();
+    return reply.length > 0 ? reply : t(lang).unknown;
+  } catch (err) {
+    console.error('[assistant] chat reply failed:', (err as Error).message);
+    return t(lang).unknown;
+  }
+}
 
 /**
  * Core assistant flow. SECURITY INVARIANT: every tool call below receives the
@@ -33,6 +43,7 @@ export async function handleAssistantQuery(
 ): Promise<string> {
   const user = await getOrCreateUser(slackUserId, slackTeamId, profile);
   const intent = await routeIntent(text);
+  const lang = intent.lang;
 
   try {
     switch (intent.intent) {
@@ -45,7 +56,7 @@ export async function handleAssistantQuery(
           query: intent.query,
           status: items.length > 0 ? 'success' : 'empty',
         });
-        return formatDriveResults(items);
+        return formatDriveResults(items, lang);
       }
 
       case 'calendar_events': {
@@ -54,6 +65,7 @@ export async function handleAssistantQuery(
           intent.range,
           intent.startDate,
           intent.endDate,
+          lang,
         );
         await logAudit({
           userId: user.id,
@@ -62,7 +74,7 @@ export async function handleAssistantQuery(
           query: intent.range,
           status: events.length > 0 ? 'success' : 'empty',
         });
-        return formatCalendarResults(events, rangeLabel);
+        return formatCalendarResults(events, rangeLabel, lang);
       }
 
       case 'clickup_task_status': {
@@ -74,8 +86,8 @@ export async function handleAssistantQuery(
           query: intent.query,
           status: tasks.length > 0 ? 'success' : 'empty',
         });
-        const intro = tasks.length === 1 ? 'I found this task:' : 'I found these tasks:';
-        return formatClickUpTasks(tasks, intro);
+        const intro = tasks.length === 1 ? t(lang).foundTask : t(lang).foundTasks;
+        return formatClickUpTasks(tasks, intro, lang);
       }
 
       case 'clickup_my_tasks': {
@@ -87,46 +99,49 @@ export async function handleAssistantQuery(
           query: `${intent.status}/${intent.range}`,
           status: tasks.length > 0 ? 'success' : 'empty',
         });
-        const label =
+        const intro =
           intent.status === 'overdue'
-            ? 'Your overdue tasks:'
+            ? t(lang).overdueTasks
             : intent.status === 'in_progress'
-              ? 'Your tasks in progress:'
-              : 'Your tasks:';
-        return formatClickUpTasks(tasks, label);
+              ? t(lang).inProgressTasks
+              : t(lang).yourTasks;
+        return formatClickUpTasks(tasks, intro, lang);
       }
 
       case 'help':
-        return HELP_TEXT;
+        return helpText(lang);
+
+      case 'chat':
+        return generateChatReply(text, lang);
 
       case 'unknown':
-        return UNKNOWN_TEXT;
+        return t(lang).unknown;
     }
   } catch (err) {
     if (err instanceof NotConnectedError) {
       await logAudit({
         userId: user.id,
-        action: `${intent.intent}`,
+        action: intent.intent,
         provider: err.provider,
         status: 'not_connected',
       });
-      return connectPrompt(err.provider);
+      return connectPrompt(err.provider, lang);
     }
     if (err instanceof ReconnectRequiredError) {
       await logAudit({
         userId: user.id,
-        action: `${intent.intent}`,
+        action: intent.intent,
         provider: err.provider,
         status: 'error',
       });
-      return reconnectPrompt(err.provider);
+      return reconnectPrompt(err.provider, lang);
     }
     if (err instanceof RateLimitError) {
-      return 'That service is rate-limiting requests right now. Please try again in a minute.';
+      return t(lang).rateLimit;
     }
     // Never log raw error objects that could contain tokens or payloads.
     console.error(`[assistant] tool call failed for intent ${intent.intent}:`, (err as Error).message);
     await logAudit({ userId: user.id, action: intent.intent, status: 'error' });
-    return GENERIC_ERROR_TEXT;
+    return t(lang).genericError;
   }
 }
