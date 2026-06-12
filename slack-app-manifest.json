@@ -34,6 +34,12 @@
         "command": "/vivo-help",
         "description": "Show what Vivo Assistant can do",
         "should_escape": false
+      },
+      {
+        "command": "/vivo-reset",
+        "description": "Erase all your data and start fresh (asks for confirmation)",
+        "usage_hint": "[confirm]",
+        "should_escape": false
       }
     ]
   },

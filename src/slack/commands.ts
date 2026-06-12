@@ -2,7 +2,7 @@ import type { App } from '@slack/bolt';
 import { signState } from '../security/encryption';
 import { getGoogleAuthUrl } from '../oauth/googleOAuth';
 import { getClickUpAuthUrl } from '../oauth/clickupOAuth';
-import { getUser } from '../services/userService';
+import { deleteUser, getUser } from '../services/userService';
 import { deleteConnections, listConnections } from '../services/connectionService';
 import { helpText } from '../utils/formatters';
 import type { ProviderName } from '../types';
@@ -159,6 +159,40 @@ export function registerCommands(app: App): void {
       });
     } catch (err) {
       console.error('[commands] /vivo-disconnect failed:', (err as Error).message);
+      await respond({ response_type: 'ephemeral', text: COMMAND_ERROR_TEXT });
+    }
+  });
+
+  app.command('/vivo-reset', async ({ ack, respond, command }) => {
+    await ack();
+    try {
+      const user = await getUser(command.user_id, command.team_id);
+      if (!user) {
+        await respond({
+          response_type: 'ephemeral',
+          text: 'There is nothing to reset — you have no data stored yet. / No hay nada que reiniciar: aún no tienes datos guardados.',
+        });
+        return;
+      }
+
+      if (command.text.trim().toLowerCase() !== 'confirm') {
+        await respond({
+          response_type: 'ephemeral',
+          text:
+            ':warning: *This will erase everything I know about you*: your connected Google and ClickUp accounts and your usage history. You would need to run `/vivo-connect` again.\n' +
+            '_Esto borra todo lo que sé de ti: tus cuentas conectadas de Google y ClickUp y tu historial. Tendrías que volver a usar `/vivo-connect`._\n\n' +
+            'To confirm, run: `/vivo-reset confirm`',
+        });
+        return;
+      }
+
+      await deleteUser(user.id);
+      await respond({
+        response_type: 'ephemeral',
+        text: '✨ Fresh start! All your data has been removed. Use `/vivo-connect` whenever you want to link your accounts again. / ¡Borrón y cuenta nueva! Todos tus datos fueron eliminados.',
+      });
+    } catch (err) {
+      console.error('[commands] /vivo-reset failed:', (err as Error).message);
       await respond({ response_type: 'ephemeral', text: COMMAND_ERROR_TEXT });
     }
   });

@@ -30,3 +30,8 @@ export async function getUser(slackUserId: string, slackTeamId: string) {
     where: { slackUserId_slackTeamId: { slackUserId, slackTeamId } },
   });
 }
+
+/** Full reset: removes the user and (via cascade) all connections and audit logs. */
+export async function deleteUser(userId: string) {
+  return prisma.user.delete({ where: { id: userId } });
+}
