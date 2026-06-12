@@ -24,12 +24,26 @@ model User {
   slackTeamId String
   name        String?
   email       String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  connections Connection[]
-  auditLogs   AuditLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  connections  Connection[]
+  auditLogs    AuditLog[]
+  chatMessages ChatMessage[]
 
   @@unique([slackUserId, slackTeamId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  source    String   @default("dm") // dm | mention
+  userText  String
+  botReply  String
+  intent    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Connection {

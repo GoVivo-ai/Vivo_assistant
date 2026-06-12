@@ -67,94 +67,146 @@ function requireAdmin(req: Request, res: Response): boolean {
   return false;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  success: '#16a34a',
-  empty: '#ca8a04',
-  error: '#dc2626',
-  not_connected: '#9333ea',
-  denied: '#dc2626',
-};
+const ADMIN_CSS = `
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 860px; margin: 0 auto;
+         padding: 32px 20px; background: #f4f4f7; color: #1a1d29; }
+  h1 { font-size: 22px; } h2 { font-size: 16px; margin: 0 0 6px; }
+  a { color: #4338ca; text-decoration: none; }
+  section { background: #fff; border-radius: 12px; padding: 20px 24px; margin: 16px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  .muted { color: #999; font-weight: 400; font-size: 12px; }
+  .badge { display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 99px;
+           padding: 2px 10px; font-size: 12px; margin-right: 6px; }
+  .badge.none { background: #f3f4f6; color: #9ca3af; }
+  .userrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .chat { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .bubble { max-width: 75%; padding: 10px 14px; border-radius: 14px; font-size: 14px;
+            line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .bubble.user { align-self: flex-end; background: #4338ca; color: #fff; border-bottom-right-radius: 4px; }
+  .bubble.bot { align-self: flex-start; background: #ececf1; color: #1a1d29; border-bottom-left-radius: 4px; }
+  .meta { font-size: 11px; color: #999; margin: 2px 6px; }
+  .meta.user { align-self: flex-end; }
+  .meta.bot { align-self: flex-start; }
+  .chip { display: inline-block; background: #f1f1f4; border-radius: 6px; padding: 0 6px;
+          font-family: monospace; font-size: 10px; color: #666; }
+`;
 
-async function renderAdminDashboard(): Promise<string> {
-  const users = await prisma.user.findMany({
-    include: {
-      connections: { select: { provider: true, providerEmail: true } },
-      auditLogs: { orderBy: { createdAt: 'desc' }, take: 30 },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  const fmt = (d: Date) =>
-    DateTime.fromJSDate(d).setZone(env.COMPANY_TIMEZONE).toFormat('LLL d, h:mm a');
-
-  const sections = users.map((user) => {
-    const title = escapeHtml(user.name ?? user.slackUserId);
-    const subtitle = escapeHtml(user.email ?? '');
-    const badges = user.connections
-      .map(
-        (c) =>
-          `<span class="badge">${c.provider}${c.providerEmail ? ` · ${escapeHtml(c.providerEmail)}` : ''}</span>`,
-      )
-      .join(' ');
-    const rows = user.auditLogs
-      .map(
-        (log) => `<tr>
-          <td class="muted">${fmt(log.createdAt)}</td>
-          <td><code>${escapeHtml(log.action)}</code></td>
-          <td>${log.provider ? escapeHtml(log.provider) : '—'}</td>
-          <td>${log.query ? escapeHtml(log.query) : '—'}</td>
-          <td><span style="color:${STATUS_COLORS[log.status] ?? '#555'}">●</span> ${escapeHtml(log.status)}</td>
-        </tr>`,
-      )
-      .join('\n');
-    return `<section>
-      <h2>${title} <small class="muted">${subtitle}</small></h2>
-      <div class="badges">${badges || '<span class="badge none">no connections</span>'}</div>
-      ${
-        user.auditLogs.length > 0
-          ? `<table><thead><tr><th>When (${escapeHtml(env.COMPANY_TIMEZONE)})</th><th>Action</th><th>Provider</th><th>Query</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
-          : '<p class="muted">No activity yet.</p>'
-      }
-    </section>`;
-  });
-
+function adminPage(title: string, body: string): string {
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Vivo Assistant — Activity</title>
-    <style>
-      body { font-family: -apple-system, system-ui, sans-serif; max-width: 960px; margin: 0 auto;
-             padding: 32px 20px; background: #f4f4f7; color: #1a1d29; }
-      h1 { font-size: 22px; } h2 { font-size: 16px; margin: 0 0 6px; }
-      section { background: #fff; border-radius: 12px; padding: 20px 24px; margin: 16px 0;
-                box-shadow: 0 2px 8px rgba(0,0,0,.05); }
-      table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-      th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #eee; }
-      td { padding: 6px 8px; border-bottom: 1px solid #f3f3f3; vertical-align: top; }
-      code { background: #f1f1f4; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
-      .muted { color: #999; font-weight: 400; font-size: 12px; }
-      .badge { display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 99px;
-               padding: 2px 10px; font-size: 12px; margin-right: 6px; }
-      .badge.none { background: #f3f4f6; color: #9ca3af; }
-    </style>
+    <title>${escapeHtml(title)} — Vivo Assistant</title>
+    <style>${ADMIN_CSS}</style>
   </head>
-  <body>
-    <h1>Vivo Assistant — Activity</h1>
-    <p class="muted">Last 30 interactions per user. Only metadata is stored (action, provider, truncated query, status) — never API responses or tokens.</p>
-    ${sections.join('\n') || '<section><p class="muted">No users yet.</p></section>'}
-  </body>
+  <body>${body}</body>
 </html>`;
+}
+
+function fmtTs(d: Date): string {
+  return DateTime.fromJSDate(d).setZone(env.COMPANY_TIMEZONE).toFormat('LLL d, h:mm a');
+}
+
+async function renderUserList(): Promise<string> {
+  const users = await prisma.user.findMany({
+    include: {
+      connections: { select: { provider: true, providerEmail: true } },
+      chatMessages: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+      _count: { select: { chatMessages: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  const rows = users.map((user) => {
+    const title = escapeHtml(user.name ?? user.slackUserId);
+    const subtitle = escapeHtml(user.email ?? '');
+    const badges =
+      user.connections
+        .map(
+          (c) =>
+            `<span class="badge">${c.provider}${c.providerEmail ? ` · ${escapeHtml(c.providerEmail)}` : ''}</span>`,
+        )
+        .join(' ') || '<span class="badge none">no connections</span>';
+    const last = user.chatMessages[0]
+      ? `last message ${fmtTs(user.chatMessages[0].createdAt)}`
+      : 'no messages yet';
+    return `<section class="userrow">
+      <div>
+        <h2><a href="/admin/chat/${user.id}">${title}</a> <small class="muted">${subtitle}</small></h2>
+        <div>${badges}</div>
+      </div>
+      <div style="text-align:right">
+        <div><strong>${user._count.chatMessages}</strong> <span class="muted">messages</span></div>
+        <div class="muted">${last}</div>
+        <a href="/admin/chat/${user.id}">View chat →</a>
+      </div>
+    </section>`;
+  });
+
+  return adminPage(
+    'Users',
+    `<h1>Vivo Assistant — Conversations</h1>
+     <p class="muted">Times shown in ${escapeHtml(env.COMPANY_TIMEZONE)}. Click a user to see their full chat with the assistant.</p>
+     ${rows.join('\n') || '<section><p class="muted">No users yet.</p></section>'}`,
+  );
+}
+
+async function renderUserChat(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      connections: { select: { provider: true } },
+      chatMessages: { orderBy: { createdAt: 'desc' }, take: 100 },
+    },
+  });
+  if (!user) return null;
+
+  const messages = [...user.chatMessages].reverse();
+  const bubbles = messages
+    .map(
+      (m) => `
+      <div class="bubble user">${escapeHtml(m.userText)}</div>
+      <div class="meta user">${fmtTs(m.createdAt)} · ${m.source}</div>
+      <div class="bubble bot">${escapeHtml(m.botReply)}</div>
+      <div class="meta bot"><span class="chip">${escapeHtml(m.intent ?? '?')}</span></div>`,
+    )
+    .join('\n');
+
+  const title = escapeHtml(user.name ?? user.slackUserId);
+  return adminPage(
+    title,
+    `<p><a href="/admin">← All users</a></p>
+     <section>
+       <h2>${title} <small class="muted">${escapeHtml(user.email ?? '')}</small></h2>
+       <div>${user.connections.map((c) => `<span class="badge">${c.provider}</span>`).join(' ') || '<span class="badge none">no connections</span>'}</div>
+       <div class="chat">${bubbles || '<p class="muted">No messages yet.</p>'}</div>
+     </section>`,
+  );
 }
 
 export function registerOAuthRoutes(router: IRouter): void {
   router.get('/admin', async (req: Request, res: Response) => {
     if (!requireAdmin(req, res)) return;
     try {
-      res.send(await renderAdminDashboard());
+      res.send(await renderUserList());
     } catch (err) {
-      console.error('[admin] dashboard render failed:', (err as Error).message);
+      console.error('[admin] user list render failed:', (err as Error).message);
+      res.status(500).send('Internal error');
+    }
+  });
+
+  router.get('/admin/chat/:userId', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const html = await renderUserChat(req.params.userId);
+      if (!html) {
+        res.status(404).send('User not found');
+        return;
+      }
+      res.send(html);
+    } catch (err) {
+      console.error('[admin] chat render failed:', (err as Error).message);
       res.status(500).send('Internal error');
     }
   });

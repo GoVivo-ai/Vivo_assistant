@@ -27,6 +27,7 @@ async function answer(
   slackUserId: string,
   slackTeamId: string,
   rawText: string,
+  source: 'dm' | 'mention',
   threadTs?: string,
 ): Promise<void> {
   const text = rawText.replace(/<@[^>]+>/g, '').trim();
@@ -37,7 +38,7 @@ async function answer(
 
   const profile = await fetchProfile(client, slackUserId);
   try {
-    const reply = await handleAssistantQuery(slackUserId, slackTeamId, text, profile);
+    const reply = await handleAssistantQuery(slackUserId, slackTeamId, text, profile, source);
     await say({ text: reply, thread_ts: threadTs });
   } catch (err) {
     console.error('[events] assistant query failed:', (err as Error).message);
@@ -54,6 +55,7 @@ export function registerEvents(app: App): void {
       event.user as string,
       context.teamId ?? event.team ?? 'unknown',
       event.text,
+      'mention',
       event.thread_ts ?? event.ts,
     );
   });
@@ -63,6 +65,6 @@ export function registerEvents(app: App): void {
     if (message.subtype !== undefined) return; // skip edits, deletes, joins, etc.
     const dm = message as GenericMessageEvent;
     if (dm.channel_type !== 'im' || !dm.user || dm.bot_id) return;
-    await answer(client, say, dm.user, context.teamId ?? dm.team ?? 'unknown', dm.text ?? '');
+    await answer(client, say, dm.user, context.teamId ?? dm.team ?? 'unknown', dm.text ?? '', 'dm');
   });
 }

@@ -6,6 +6,7 @@ import { getCalendarEvents } from '../tools/googleCalendar';
 import { getMyClickUpTasks, searchClickUpTasks } from '../tools/clickup';
 import { getOrCreateUser, type SlackProfile } from '../services/userService';
 import { logAudit } from '../services/auditService';
+import { prisma } from '../db/prisma';
 import {
   NotConnectedError,
   RateLimitError,
@@ -37,6 +38,31 @@ async function generateChatReply(
   }
 }
 
+const MAX_STORED_TEXT = 4000;
+
+/** Stores the full exchange for the /admin conversation view. Best-effort. */
+async function saveChatMessage(
+  userId: string,
+  source: 'dm' | 'mention',
+  userText: string,
+  botReply: string,
+  intent: string,
+): Promise<void> {
+  try {
+    await prisma.chatMessage.create({
+      data: {
+        userId,
+        source,
+        userText: userText.slice(0, MAX_STORED_TEXT),
+        botReply: botReply.slice(0, MAX_STORED_TEXT),
+        intent,
+      },
+    });
+  } catch (err) {
+    console.error('[assistant] failed to store chat message:', (err as Error).message);
+  }
+}
+
 /**
  * Core assistant flow. SECURITY INVARIANT: every tool call below receives the
  * internal id of the Slack user who sent the message, and each tool resolves
@@ -47,9 +73,20 @@ export async function handleAssistantQuery(
   slackTeamId: string,
   text: string,
   profile?: SlackProfile,
+  source: 'dm' | 'mention' = 'dm',
 ): Promise<string> {
   const user = await getOrCreateUser(slackUserId, slackTeamId, profile);
   const intent = await routeIntent(text);
+  const reply = await executeIntent(user, intent, text);
+  await saveChatMessage(user.id, source, text, reply, intent.intent);
+  return reply;
+}
+
+async function executeIntent(
+  user: { id: string; name: string | null },
+  intent: Awaited<ReturnType<typeof routeIntent>>,
+  text: string,
+): Promise<string> {
   const lang = intent.lang;
 
   try {
