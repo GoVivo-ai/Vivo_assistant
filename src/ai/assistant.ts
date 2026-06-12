@@ -1,5 +1,6 @@
 import { callModel, routeIntent, type Lang } from './intentRouter';
-import { chatSystemPrompt } from './prompts';
+import { chatSystemPrompt, type ChatUserContext } from './prompts';
+import { listConnections } from '../services/connectionService';
 import { searchDriveFiles } from '../tools/googleDrive';
 import { getCalendarEvents } from '../tools/googleCalendar';
 import { getMyClickUpTasks, searchClickUpTasks } from '../tools/clickup';
@@ -20,9 +21,15 @@ import {
   t,
 } from '../utils/formatters';
 
-async function generateChatReply(text: string, lang: Lang): Promise<string> {
+async function generateChatReply(
+  text: string,
+  lang: Lang,
+  userContext?: ChatUserContext,
+): Promise<string> {
   try {
-    const reply = (await callModel(chatSystemPrompt(lang), text, { maxTokens: 200 })).trim();
+    const reply = (
+      await callModel(chatSystemPrompt(lang, userContext), text, { maxTokens: 200 })
+    ).trim();
     return reply.length > 0 ? reply : t(lang).unknown;
   } catch (err) {
     console.error('[assistant] chat reply failed:', (err as Error).message);
@@ -111,8 +118,14 @@ export async function handleAssistantQuery(
       case 'help':
         return helpText(lang);
 
-      case 'chat':
-        return generateChatReply(text, lang);
+      case 'chat': {
+        const connections = await listConnections(user.id);
+        return generateChatReply(text, lang, {
+          name: user.name,
+          googleConnected: connections.some((c) => c.provider === 'google'),
+          clickupConnected: connections.some((c) => c.provider === 'clickup'),
+        });
+      }
 
       case 'unknown':
         return t(lang).unknown;

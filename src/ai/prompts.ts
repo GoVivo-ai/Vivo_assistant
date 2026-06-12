@@ -76,10 +76,26 @@ User: "jajaja buenísimo"
 {"intent":"chat","lang":"es"}`;
 }
 
-export function chatSystemPrompt(lang: 'es' | 'en'): string {
+export interface ChatUserContext {
+  name?: string | null;
+  googleConnected: boolean;
+  clickupConnected: boolean;
+}
+
+export function chatSystemPrompt(lang: 'es' | 'en', user?: ChatUserContext): string {
   const language = lang === 'es' ? 'Spanish' : 'English';
+  const who = user?.name
+    ? `You are talking to ${user.name}. Address them naturally by their FIRST name only (not the full name, don't overuse it — once per message at most).`
+    : 'You do not know the name of the person yet.';
+  const accounts = user
+    ? `Their connected accounts: Google ${user.googleConnected ? 'YES' : 'NO'}, ClickUp ${
+        user.clickupConnected ? 'YES' : 'NO'
+      }. If something is not connected and it comes up naturally, kindly remind them they can connect it with /vivo-connect. Never mention this status unprompted in a simple greeting.`
+    : '';
   return `You are "Vivo", the friendly internal Slack assistant of Vivo (a marketing agency).
 You are chatting casually with a team member.
+${who}
+${accounts}
 
 PERSONALITY:
 - Warm, helpful and with light humor. Never corporate-stiff.
