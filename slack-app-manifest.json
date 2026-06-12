@@ -1,0 +1,58 @@
+{
+  "display_information": {
+    "name": "Vivo Assistant",
+    "description": "Internal Vivo assistant for Google Drive, Calendar and ClickUp",
+    "background_color": "#1a1d29"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Vivo Assistant",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/vivo-connect",
+        "description": "Connect your Google & ClickUp accounts",
+        "should_escape": false
+      },
+      {
+        "command": "/vivo-disconnect",
+        "description": "Remove your connected accounts (optionally: google | clickup)",
+        "usage_hint": "[google|clickup]",
+        "should_escape": false
+      },
+      {
+        "command": "/vivo-whoami",
+        "description": "Show your connected accounts",
+        "should_escape": false
+      },
+      {
+        "command": "/vivo-help",
+        "description": "Show what Vivo Assistant can do",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "chat:write",
+        "commands",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "bot_events": ["app_mention"]
+    },
+    "interactivity": {
+      "is_enabled": true
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
