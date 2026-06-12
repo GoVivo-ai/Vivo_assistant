@@ -34,6 +34,12 @@ const ERROR_PAGE = page(
 );
 
 export function registerOAuthRoutes(router: IRouter): void {
+  router.get('/', (_req: Request, res: Response) => {
+    res.send(
+      page('Vivo Assistant', 'OAuth service is running. Use /vivo-connect in Slack to link your accounts.'),
+    );
+  });
+
   router.get('/healthz', (_req: Request, res: Response) => {
     res.json({ ok: true });
   });

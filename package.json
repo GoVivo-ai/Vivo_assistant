@@ -4,6 +4,7 @@
   "description": "Vivo internal Slack assistant — per-user Google Drive, Google Calendar and ClickUp access",
   "main": "dist/index.js",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
