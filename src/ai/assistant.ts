@@ -55,15 +55,16 @@ export async function handleAssistantQuery(
   try {
     switch (intent.intent) {
       case 'search_drive': {
+        const isSearch = Boolean(intent.query && intent.query.trim().length > 0);
         const items = await searchDriveFiles(user.id, intent.query, intent.type);
         await logAudit({
           userId: user.id,
-          action: 'drive.search',
+          action: isSearch ? 'drive.search' : 'drive.list',
           provider: 'google',
-          query: intent.query,
+          query: intent.query ?? `list:${intent.type}`,
           status: items.length > 0 ? 'success' : 'empty',
         });
-        return formatDriveResults(items, lang);
+        return formatDriveResults(items, lang, isSearch);
       }
 
       case 'calendar_events': {

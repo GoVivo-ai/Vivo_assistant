@@ -11,7 +11,8 @@ const IntentSchema = z.discriminatedUnion('intent', [
   z.object({
     intent: z.literal('search_drive'),
     lang: langField,
-    query: z.string().min(1),
+    // Omitted/empty query = "list my recent files/folders" rather than a search.
+    query: z.string().optional(),
     type: z.enum(['file', 'folder', 'any']).default('any'),
   }),
   z.object({

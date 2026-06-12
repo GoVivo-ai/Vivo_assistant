@@ -13,10 +13,11 @@ OUTPUT RULES:
 
 INTENTS:
 
-1. search_drive — the user wants to find a file or folder in Google Drive.
+1. search_drive — the user wants to find a file or folder in Google Drive, or list their Drive content.
    {"intent":"search_drive","lang":"en","query":"<search terms>","type":"file"|"folder"|"any"}
-   Use "folder" only if the user explicitly asks for a folder/carpeta, "file" only if they explicitly ask for a file/document/archivo, otherwise "any".
+   Use "folder" only if the user explicitly asks for folders/carpetas, "file" only if they explicitly ask for files/documents/archivos, otherwise "any".
    The query must contain only the meaningful search terms (project or document name), not filler words.
+   If the user asks to LIST their files or folders without naming anything specific ("what folders do I have?", "qué carpetas tengo en mi drive?", "show my recent files"), OMIT the query field entirely.
 
 2. calendar_events — the user asks about their meetings or calendar.
    {"intent":"calendar_events","lang":"en","range":"today"|"tomorrow"|"this_week"|"next_week"|"custom","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD"}
@@ -44,6 +45,12 @@ User: "where is the Alexia proposal?"
 
 User: "dónde está la carpeta del sitio web de Vectora?"
 {"intent":"search_drive","lang":"es","query":"Vectora website","type":"folder"}
+
+User: "qué carpetas tengo en mi drive?"
+{"intent":"search_drive","lang":"es","type":"folder"}
+
+User: "show me my recent files"
+{"intent":"search_drive","lang":"en","type":"file"}
 
 User: "what meetings do I have this week?"
 {"intent":"calendar_events","lang":"en","range":"this_week"}

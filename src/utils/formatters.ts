@@ -11,6 +11,7 @@ export type Lang = 'es' | 'en';
 const S = {
   en: {
     driveIntro: 'I found these matching Drive items:',
+    driveListIntro: 'Here are your most recent Drive items:',
     driveEmpty: 'I could not find any matching Drive items available for your account.',
     type: 'Type',
     lastModified: 'Last modified',
@@ -42,6 +43,7 @@ const S = {
   },
   es: {
     driveIntro: 'Encontré estos elementos en Drive:',
+    driveListIntro: 'Estos son tus elementos más recientes en Drive:',
     driveEmpty: 'No encontré archivos o carpetas que coincidan, disponibles para tu cuenta.',
     type: 'Tipo',
     lastModified: 'Última modificación',
@@ -156,7 +158,11 @@ function mimeLabel(mimeType: string, lang: Lang): string {
   return segment.toUpperCase().slice(0, 20);
 }
 
-export function formatDriveResults(items: DriveItem[], lang: Lang = 'en'): string {
+export function formatDriveResults(
+  items: DriveItem[],
+  lang: Lang = 'en',
+  isSearch = true,
+): string {
   const s = t(lang);
   if (items.length === 0) return s.driveEmpty;
   const lines = items.map((item, i) => {
@@ -166,7 +172,7 @@ export function formatDriveResults(items: DriveItem[], lang: Lang = 'en'): strin
     if (item.webViewLink) parts.push(`${s.open}: <${item.webViewLink}|${s.link}>`);
     return parts.join('\n');
   });
-  return `${s.driveIntro}\n\n${lines.join('\n\n')}`;
+  return `${isSearch ? s.driveIntro : s.driveListIntro}\n\n${lines.join('\n\n')}`;
 }
 
 export function formatCalendarResults(
