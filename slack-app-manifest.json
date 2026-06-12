@@ -5,6 +5,10 @@
     "background_color": "#1a1d29"
   },
   "features": {
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
     "bot_user": {
       "display_name": "Vivo Assistant",
       "always_online": true
@@ -39,6 +43,7 @@
         "app_mentions:read",
         "chat:write",
         "commands",
+        "im:history",
         "users:read",
         "users:read.email"
       ]
@@ -46,7 +51,7 @@
   },
   "settings": {
     "event_subscriptions": {
-      "bot_events": ["app_mention"]
+      "bot_events": ["app_mention", "message.im"]
     },
     "interactivity": {
       "is_enabled": true
