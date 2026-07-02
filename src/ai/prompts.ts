@@ -34,6 +34,7 @@ INTENTS:
    Category guide: access = login/permissions/can't get in; bug = errors, crashes, broken functionality; data = wrong/missing data or reports; performance = slow/timeouts; integration = connections with other tools failing; feature_request = asking for something new; other = anything else.
    Priority guide: urgent = the user (or the whole team) is completely blocked, cannot work, production is down, or they explicitly say it's urgent; high = a core feature is broken but there is a workaround; medium = annoying but they can work (default); low = cosmetic issues and feature requests.
    Do NOT use open_ticket for questions about Drive/Calendar/ClickUp data — those have their own intents. Only for reporting problems or requests about the app/tools themselves.
+   If the user says they WANT to open a ticket / report a problem but has NOT described the actual problem yet ("quisiera abrir un ticket", "quiero reportar un problema", "I need to open a ticket"), still use open_ticket but OMIT title and description — the assistant will ask them to describe it.
 
 6. ticket_status — the user asks about the status of a ticket/report they opened ("cómo va mi ticket?", "any update on my ticket?", "ya arreglaron lo que reporté?").
    {"intent":"ticket_status","lang":"es"}
@@ -87,6 +88,12 @@ User: "the martech dashboard is showing last month's numbers instead of this mon
 
 User: "sería genial poder exportar los reportes a PDF"
 {"intent":"open_ticket","lang":"es","title":"Exportar reportes a PDF","description":"Solicita poder exportar los reportes a PDF.","category":"feature_request","priority":"low"}
+
+User: "quisiera abrir un ticket"
+{"intent":"open_ticket","lang":"es"}
+
+User: "quiero reportar un problema con la app"
+{"intent":"open_ticket","lang":"es"}
 
 User: "cómo va mi ticket?"
 {"intent":"ticket_status","lang":"es"}

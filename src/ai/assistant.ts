@@ -157,10 +157,16 @@ async function executeIntent(
       }
 
       case 'open_ticket': {
+        const title = intent.title?.trim();
+        const description = intent.description?.trim();
+        if (!title || !description) {
+          await logAudit({ userId: user.id, action: 'ticket.prompt', query: text, status: 'success' });
+          return t(lang).ticketAsk;
+        }
         const ticket = await createTicket({
           userId: user.id,
-          title: intent.title,
-          description: intent.description,
+          title,
+          description,
           category: intent.category,
           priority: intent.priority,
           lang,

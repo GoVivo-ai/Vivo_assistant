@@ -36,8 +36,10 @@ const IntentSchema = z.discriminatedUnion('intent', [
   z.object({
     intent: z.literal('open_ticket'),
     lang: langField,
-    title: z.string().min(1),
-    description: z.string().min(1),
+    // Both omitted/empty when the user wants to open a ticket but has not
+    // described the problem yet — the assistant then asks for the details.
+    title: z.string().optional(),
+    description: z.string().optional(),
     category: z
       .enum(['access', 'bug', 'data', 'performance', 'integration', 'feature_request', 'other'])
       .default('other'),

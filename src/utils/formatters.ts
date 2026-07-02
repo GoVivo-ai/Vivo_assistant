@@ -37,6 +37,8 @@ const S = {
     connectClickup: 'You need to connect your ClickUp account first. Use `/vivo-connect`.',
     reconnect: (name: string) =>
       `Your ${name} connection has expired. Please reconnect it with \`/vivo-connect\`.`,
+    ticketAsk:
+      '🎫 Sure! Tell me what is going on — describe the problem you are having with the Martech app (what fails, since when, any error message) and I will open the ticket right away.',
     ticketOpened: (n: number) => `🎫 Done! I opened ticket *#${n}* for you:`,
     ticketFollowup:
       'The team has been notified and I will DM you here as soon as it is resolved. You can ask me "how is my ticket going?" anytime.',
@@ -79,6 +81,8 @@ const S = {
     connectClickup: 'Primero necesitas conectar tu cuenta de ClickUp. Usa `/vivo-connect`.',
     reconnect: (name: string) =>
       `Tu conexión con ${name} expiró. Vuelve a conectarla con \`/vivo-connect\`.`,
+    ticketAsk:
+      '🎫 ¡Claro! Cuéntame qué está pasando — descríbeme el problema que tienes con la app de Martech (qué falla, desde cuándo, algún mensaje de error) y te abro el ticket de una vez.',
     ticketOpened: (n: number) => `🎫 ¡Listo! Abrí el ticket *#${n}* por ti:`,
     ticketFollowup:
       'El equipo ya fue notificado y te escribiré por aquí en cuanto esté solucionado. Puedes preguntarme "¿cómo va mi ticket?" cuando quieras.',
