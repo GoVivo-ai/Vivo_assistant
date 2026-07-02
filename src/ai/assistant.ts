@@ -6,6 +6,7 @@ import { getCalendarEvents } from '../tools/googleCalendar';
 import { getMyClickUpTasks, searchClickUpTasks } from '../tools/clickup';
 import { getOrCreateUser, type SlackProfile } from '../services/userService';
 import { logAudit } from '../services/auditService';
+import { createTicket, listUserTickets } from '../services/ticketService';
 import { prisma } from '../db/prisma';
 import {
   NotConnectedError,
@@ -17,6 +18,8 @@ import {
   formatCalendarResults,
   formatClickUpTasks,
   formatDriveResults,
+  formatTicketList,
+  formatTicketOpened,
   helpText,
   reconnectPrompt,
   t,
@@ -151,6 +154,35 @@ async function executeIntent(
               ? t(lang).inProgressTasks
               : t(lang).yourTasks;
         return formatClickUpTasks(tasks, intro, lang);
+      }
+
+      case 'open_ticket': {
+        const ticket = await createTicket({
+          userId: user.id,
+          title: intent.title,
+          description: intent.description,
+          category: intent.category,
+          priority: intent.priority,
+          lang,
+        });
+        await logAudit({
+          userId: user.id,
+          action: 'ticket.open',
+          query: `#${ticket.number} ${intent.category}/${intent.priority}: ${intent.title}`,
+          status: 'success',
+        });
+        return formatTicketOpened(ticket, lang);
+      }
+
+      case 'ticket_status': {
+        const tickets = await listUserTickets(user.id);
+        await logAudit({
+          userId: user.id,
+          action: 'ticket.status',
+          query: text,
+          status: tickets.length > 0 ? 'success' : 'empty',
+        });
+        return formatTicketList(tickets, lang);
       }
 
       case 'help':

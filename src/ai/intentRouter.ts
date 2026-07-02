@@ -33,6 +33,17 @@ const IntentSchema = z.discriminatedUnion('intent', [
     status: z.enum(['open', 'in_progress', 'overdue', 'all']).default('all'),
     range: z.enum(['today', 'this_week', 'all']).default('all'),
   }),
+  z.object({
+    intent: z.literal('open_ticket'),
+    lang: langField,
+    title: z.string().min(1),
+    description: z.string().min(1),
+    category: z
+      .enum(['access', 'bug', 'data', 'performance', 'integration', 'feature_request', 'other'])
+      .default('other'),
+    priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+  }),
+  z.object({ intent: z.literal('ticket_status'), lang: langField }),
   z.object({ intent: z.literal('help'), lang: langField }),
   z.object({ intent: z.literal('chat'), lang: langField }),
   z.object({ intent: z.literal('unknown'), lang: langField }),

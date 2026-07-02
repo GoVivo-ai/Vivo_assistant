@@ -4,6 +4,7 @@ import type {
   DriveItem,
   ProviderName,
 } from '../types';
+import type { TicketCategory, TicketPriority, TicketStatus } from '../services/ticketService';
 import { formatDate, formatEventStart } from './dates';
 
 export type Lang = 'es' | 'en';
@@ -36,6 +37,16 @@ const S = {
     connectClickup: 'You need to connect your ClickUp account first. Use `/vivo-connect`.',
     reconnect: (name: string) =>
       `Your ${name} connection has expired. Please reconnect it with \`/vivo-connect\`.`,
+    ticketOpened: (n: number) => `🎫 Done! I opened ticket *#${n}* for you:`,
+    ticketFollowup:
+      'The team has been notified and I will DM you here as soon as it is resolved. You can ask me "how is my ticket going?" anytime.',
+    ticketListIntro: 'Here are your latest tickets:',
+    ticketListEmpty:
+      "You don't have any tickets yet. If something in the Martech app is failing, just describe the problem and I'll open one for you.",
+    category: 'Category',
+    ticketStatus: 'Status',
+    opened: 'Opened',
+    resolved: 'Resolved',
     rateLimit: 'That service is rate-limiting requests right now. Please try again in a minute.',
     genericError:
       "I couldn't complete that request right now. Please try again or reconnect your account with `/vivo-connect`.",
@@ -68,6 +79,16 @@ const S = {
     connectClickup: 'Primero necesitas conectar tu cuenta de ClickUp. Usa `/vivo-connect`.',
     reconnect: (name: string) =>
       `Tu conexión con ${name} expiró. Vuelve a conectarla con \`/vivo-connect\`.`,
+    ticketOpened: (n: number) => `🎫 ¡Listo! Abrí el ticket *#${n}* por ti:`,
+    ticketFollowup:
+      'El equipo ya fue notificado y te escribiré por aquí en cuanto esté solucionado. Puedes preguntarme "¿cómo va mi ticket?" cuando quieras.',
+    ticketListIntro: 'Estos son tus últimos tickets:',
+    ticketListEmpty:
+      'Aún no tienes tickets. Si algo en la app de Martech está fallando, descríbeme el problema y te abro uno.',
+    category: 'Categoría',
+    ticketStatus: 'Estado',
+    opened: 'Abierto',
+    resolved: 'Solucionado',
     rateLimit: 'Ese servicio está limitando las solicitudes ahora mismo. Intenta de nuevo en un minuto.',
     genericError:
       'No pude completar esa solicitud. Intenta de nuevo o reconecta tu cuenta con `/vivo-connect`.',
@@ -97,6 +118,10 @@ export function helpText(lang: Lang = 'en'): string {
       '• `muéstrame mis tareas vencidas`',
       '• `qué tareas tengo pendientes?`',
       '',
+      '*Soporte técnico*',
+      '• Describe cualquier problema con la app de Martech y abro un ticket por ti',
+      '• `cómo va mi ticket?` — consulta el estado de tus tickets',
+      '',
       '*Comandos*',
       '• `/vivo-connect` — conecta tus cuentas de Google y ClickUp',
       '• `/vivo-whoami` — mira tus cuentas conectadas',
@@ -121,6 +146,10 @@ export function helpText(lang: Lang = 'en'): string {
     '• `@Vivo Assistant status of payroll task`',
     '• `@Vivo Assistant show my overdue tasks`',
     '• `@Vivo Assistant what tasks do I have pending?`',
+    '',
+    '*Tech support*',
+    '• Describe any problem with the Martech app and I will open a ticket for you',
+    '• `how is my ticket going?` — check the status of your tickets',
     '',
     '*Commands*',
     '• `/vivo-connect` — connect your Google and ClickUp accounts',
@@ -189,6 +218,94 @@ export function formatCalendarResults(
     return parts.join('\n');
   });
   return `${s.meetings(rangeLabel)}\n\n${lines.join('\n\n')}`;
+}
+
+export const TICKET_CATEGORY_LABELS: Record<TicketCategory, { es: string; en: string }> = {
+  access: { es: 'Acceso / Login', en: 'Access / Login' },
+  bug: { es: 'Error / Bug', en: 'Bug' },
+  data: { es: 'Datos / Reportes', en: 'Data / Reports' },
+  performance: { es: 'Rendimiento', en: 'Performance' },
+  integration: { es: 'Integraciones', en: 'Integrations' },
+  feature_request: { es: 'Solicitud de mejora', en: 'Feature request' },
+  other: { es: 'Otro', en: 'Other' },
+};
+
+export const TICKET_PRIORITY_LABELS: Record<TicketPriority, { es: string; en: string }> = {
+  low: { es: 'Baja', en: 'Low' },
+  medium: { es: 'Media', en: 'Medium' },
+  high: { es: 'Alta', en: 'High' },
+  urgent: { es: 'Urgente', en: 'Urgent' },
+};
+
+export const TICKET_STATUS_LABELS: Record<TicketStatus, { es: string; en: string }> = {
+  open: { es: 'Abierto', en: 'Open' },
+  in_progress: { es: 'En proceso', en: 'In progress' },
+  resolved: { es: 'Solucionado', en: 'Resolved' },
+  closed: { es: 'Cerrado', en: 'Closed' },
+};
+
+const PRIORITY_EMOJI: Record<TicketPriority, string> = {
+  low: '⚪',
+  medium: '🟡',
+  high: '🟠',
+  urgent: '🔴',
+};
+
+const STATUS_EMOJI: Record<TicketStatus, string> = {
+  open: '🆕',
+  in_progress: '🔧',
+  resolved: '✅',
+  closed: '⬛',
+};
+
+function ticketLabel<K extends string>(
+  map: Record<K, { es: string; en: string }>,
+  key: string,
+  lang: Lang,
+): string {
+  return (map as Record<string, { es: string; en: string }>)[key]?.[lang] ?? key;
+}
+
+export interface TicketView {
+  number: number;
+  title: string;
+  category: string;
+  priority: string;
+  status: string;
+  resolutionNote: string | null;
+  createdAt: Date;
+  resolvedAt: Date | null;
+}
+
+export function formatTicketOpened(ticket: TicketView, lang: Lang = 'es'): string {
+  const s = t(lang);
+  const p = PRIORITY_EMOJI[ticket.priority as TicketPriority] ?? '🟡';
+  return [
+    s.ticketOpened(ticket.number),
+    `*${ticket.title}*`,
+    `${s.category}: ${ticketLabel(TICKET_CATEGORY_LABELS, ticket.category, lang)}`,
+    `${s.priority}: ${p} ${ticketLabel(TICKET_PRIORITY_LABELS, ticket.priority, lang)}`,
+    '',
+    s.ticketFollowup,
+  ].join('\n');
+}
+
+export function formatTicketList(tickets: TicketView[], lang: Lang = 'es'): string {
+  const s = t(lang);
+  if (tickets.length === 0) return s.ticketListEmpty;
+  const lines = tickets.map((ticket) => {
+    const status = STATUS_EMOJI[ticket.status as TicketStatus] ?? '🆕';
+    const parts = [
+      `*#${ticket.number} — ${ticket.title}*`,
+      `${s.ticketStatus}: ${status} ${ticketLabel(TICKET_STATUS_LABELS, ticket.status, lang)}`,
+      `${s.priority}: ${ticketLabel(TICKET_PRIORITY_LABELS, ticket.priority, lang)} · ${s.opened}: ${formatDate(ticket.createdAt.toISOString(), lang)}`,
+    ];
+    if (ticket.status === 'resolved' && ticket.resolutionNote) {
+      parts.push(`${s.resolved}: ${ticket.resolutionNote}`);
+    }
+    return parts.join('\n');
+  });
+  return `${s.ticketListIntro}\n\n${lines.join('\n\n')}`;
 }
 
 export function formatClickUpTasks(
