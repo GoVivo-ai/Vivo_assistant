@@ -134,10 +134,6 @@ async function notifyTicketResolved(
 ): Promise<boolean> {
   try {
     const client = new WebClient(env.SLACK_BOT_TOKEN);
-    const dm = await client.conversations.open({ users: slackUserId });
-    const channel = dm.channel?.id;
-    if (!channel) return false;
-
     const note = resolutionNote?.trim();
     const text =
       lang === 'es'
@@ -152,7 +148,15 @@ async function notifyTicketResolved(
             '\nIf the problem comes back, just tell me and I will open a new ticket. 🙌',
           ].join('');
 
-    await client.chat.postMessage({ channel, text });
+    try {
+      // Posting straight to the user id reuses the existing DM and only
+      // needs chat:write. Fallback below needs the im:write scope.
+      await client.chat.postMessage({ channel: slackUserId, text });
+    } catch {
+      const dm = await client.conversations.open({ users: slackUserId });
+      if (!dm.channel?.id) return false;
+      await client.chat.postMessage({ channel: dm.channel.id, text });
+    }
     return true;
   } catch (err) {
     console.error('[tickets] failed to notify user of resolution:', (err as Error).message);

@@ -50,6 +50,7 @@
         "chat:write",
         "commands",
         "im:history",
+        "im:write",
         "users:read",
         "users:read.email"
       ]
