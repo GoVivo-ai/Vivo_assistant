@@ -249,6 +249,24 @@ async function dmUser(slackUserId: string, text: string): Promise<void> {
     if (!dm.channel?.id) throw new Error('could not open DM channel');
     await client.chat.postMessage({ channel: dm.channel.id, text });
   }
+  await recordTicketDm(slackUserId, text);
+}
+
+/**
+ * Mirrors an outbound ticket DM into the user's chat history so it shows up
+ * in the admin "Conversaciones" view — otherwise these messages only exist
+ * in Slack. Best-effort: a logging failure must not fail the notification.
+ */
+async function recordTicketDm(slackUserId: string, text: string): Promise<void> {
+  try {
+    const user = await prisma.user.findFirst({ where: { slackUserId }, select: { id: true } });
+    if (!user) return;
+    await prisma.chatMessage.create({
+      data: { userId: user.id, source: 'ticket', userText: '', botReply: text, intent: 'ticket' },
+    });
+  } catch (err) {
+    console.error('[tickets] failed to record ticket DM in chat history:', (err as Error).message);
+  }
 }
 
 /** DMs the ticket owner that their ticket was resolved. Returns true on success. */
