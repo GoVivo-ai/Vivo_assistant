@@ -110,6 +110,10 @@ export interface TicketUpdateInput {
   priority: TicketPriority;
   adminNote?: string;
   resolutionNote?: string;
+  /** When true and the status is in_progress, DM the user that their case is being worked on. */
+  notifyInProgress?: boolean;
+  /** Optional extra detail included in the in-progress DM. */
+  progressNote?: string;
 }
 
 /**
@@ -137,6 +141,17 @@ export async function updateTicket(id: string, input: TicketUpdateInput) {
     include: { user: { select: { id: true, name: true, email: true, slackUserId: true } } },
   });
 
+  let progressNotified = false;
+  if (input.status === 'in_progress' && input.notifyInProgress) {
+    progressNotified = await notifyTicketInProgress(
+      ticket.user.slackUserId,
+      ticket.number,
+      ticket.title,
+      input.progressNote,
+      ticket.lang === 'en' ? 'en' : 'es',
+    );
+  }
+
   if (shouldNotify) {
     const notified = await notifyTicketResolved(
       ticket.user.slackUserId,
@@ -146,14 +161,94 @@ export async function updateTicket(id: string, input: TicketUpdateInput) {
       ticket.lang === 'en' ? 'en' : 'es',
     );
     if (notified) {
-      return prisma.ticket.update({
+      const refreshed = await prisma.ticket.update({
         where: { id },
         data: { notifiedAt: new Date() },
         include: { user: { select: { id: true, name: true, email: true, slackUserId: true } } },
       });
+      return { ...refreshed, progressNotified };
     }
   }
-  return ticket;
+  return { ...ticket, progressNotified };
+}
+
+/**
+ * DMs the ticket owner asking for more details about their case. The reply
+ * lands in their normal chat with Vivo, visible under /admin/chat/:userId.
+ * Returns true on success.
+ */
+export async function requestTicketInfo(id: string, question?: string): Promise<boolean> {
+  const ticket = await getTicket(id);
+  if (!ticket) return false;
+  const ask = question?.trim();
+  const lang = ticket.lang === 'en' ? 'en' : 'es';
+  const text =
+    lang === 'es'
+      ? [
+          `🔎 Sobre tu ticket *#${ticket.number}* — _${ticket.title}_ — necesitamos un poco más de información para poder ayudarte.`,
+          ask
+            ? `\n${ask}`
+            : '\n¿Puedes contarme más detalles? Por ejemplo: qué estabas haciendo cuando ocurrió, qué mensaje de error viste, y desde cuándo pasa. Si tienes pantallazos, envíamelos por aquí.',
+          '\nRespóndeme por este chat y agrego la información a tu caso. 🙌',
+        ].join('')
+      : [
+          `🔎 About your ticket *#${ticket.number}* — _${ticket.title}_ — we need a bit more information to help you.`,
+          ask
+            ? `\n${ask}`
+            : '\nCould you share more details? For example: what you were doing when it happened, any error message you saw, and since when. Screenshots are welcome too.',
+          '\nReply here and I will add the information to your case. 🙌',
+        ].join('');
+  try {
+    await dmUser(ticket.user.slackUserId, text);
+    return true;
+  } catch (err) {
+    console.error('[tickets] failed to request more info:', (err as Error).message);
+    return false;
+  }
+}
+
+/** DMs the ticket owner that their ticket is being worked on. Returns true on success. */
+async function notifyTicketInProgress(
+  slackUserId: string,
+  number: number,
+  title: string,
+  progressNote: string | undefined,
+  lang: 'es' | 'en',
+): Promise<boolean> {
+  const note = progressNote?.trim();
+  const text =
+    lang === 'es'
+      ? [
+          `🔧 Tu ticket *#${number}* — _${title}_ — está ahora *en proceso*. Nuestro equipo ya está trabajando en tu caso.`,
+          note ? `\n*Avance:* ${note}` : '',
+          '\nTe avisaré por aquí en cuanto esté solucionado. 🙌',
+        ].join('')
+      : [
+          `🔧 Your ticket *#${number}* — _${title}_ — is now *in progress*. Our team is working on your case.`,
+          note ? `\n*Update:* ${note}` : '',
+          '\nI will let you know here as soon as it is resolved. 🙌',
+        ].join('');
+  try {
+    await dmUser(slackUserId, text);
+    return true;
+  } catch (err) {
+    console.error('[tickets] failed to notify user of progress:', (err as Error).message);
+    return false;
+  }
+}
+
+/** Sends a DM to a Slack user, opening the conversation if needed. */
+async function dmUser(slackUserId: string, text: string): Promise<void> {
+  const client = new WebClient(env.SLACK_BOT_TOKEN);
+  try {
+    // Posting straight to the user id reuses the existing DM and only
+    // needs chat:write. Fallback below needs the im:write scope.
+    await client.chat.postMessage({ channel: slackUserId, text });
+  } catch {
+    const dm = await client.conversations.open({ users: slackUserId });
+    if (!dm.channel?.id) throw new Error('could not open DM channel');
+    await client.chat.postMessage({ channel: dm.channel.id, text });
+  }
 }
 
 /** DMs the ticket owner that their ticket was resolved. Returns true on success. */
@@ -164,31 +259,21 @@ async function notifyTicketResolved(
   resolutionNote: string | null,
   lang: 'es' | 'en',
 ): Promise<boolean> {
+  const note = resolutionNote?.trim();
+  const text =
+    lang === 'es'
+      ? [
+          `✅ ¡Buenas noticias! Tu ticket *#${number}* — _${title}_ — ya fue *solucionado*.`,
+          note ? `\n*Detalle de la solución:* ${note}` : '',
+          '\nSi el problema persiste, cuéntamelo y abro un nuevo ticket. 🙌',
+        ].join('')
+      : [
+          `✅ Good news! Your ticket *#${number}* — _${title}_ — has been *resolved*.`,
+          note ? `\n*Resolution details:* ${note}` : '',
+          '\nIf the problem comes back, just tell me and I will open a new ticket. 🙌',
+        ].join('');
   try {
-    const client = new WebClient(env.SLACK_BOT_TOKEN);
-    const note = resolutionNote?.trim();
-    const text =
-      lang === 'es'
-        ? [
-            `✅ ¡Buenas noticias! Tu ticket *#${number}* — _${title}_ — ya fue *solucionado*.`,
-            note ? `\n*Detalle de la solución:* ${note}` : '',
-            '\nSi el problema persiste, cuéntamelo y abro un nuevo ticket. 🙌',
-          ].join('')
-        : [
-            `✅ Good news! Your ticket *#${number}* — _${title}_ — has been *resolved*.`,
-            note ? `\n*Resolution details:* ${note}` : '',
-            '\nIf the problem comes back, just tell me and I will open a new ticket. 🙌',
-          ].join('');
-
-    try {
-      // Posting straight to the user id reuses the existing DM and only
-      // needs chat:write. Fallback below needs the im:write scope.
-      await client.chat.postMessage({ channel: slackUserId, text });
-    } catch {
-      const dm = await client.conversations.open({ users: slackUserId });
-      if (!dm.channel?.id) return false;
-      await client.chat.postMessage({ channel: dm.channel.id, text });
-    }
+    await dmUser(slackUserId, text);
     return true;
   } catch (err) {
     console.error('[tickets] failed to notify user of resolution:', (err as Error).message);

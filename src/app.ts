@@ -12,6 +12,7 @@ import {
   getTicket,
   getTicketAttachment,
   listTickets,
+  requestTicketInfo,
   updateTicket,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
@@ -361,6 +362,12 @@ async function renderTicketDetail(id: string, flash?: string): Promise<string | 
            <label>Estado</label>
            <select name="status">${statusOptions}</select>
            <div class="hint">Al pasar a <strong>Solucionado</strong>, Vivo le envía automáticamente un DM en Slack a quien abrió el ticket.</div>
+           <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer">
+             <input type="checkbox" name="notifyInProgress" value="1" style="width:auto;margin:0">
+             Avisar al usuario por Slack que su caso está <strong>en proceso</strong>
+           </label>
+           <label>Mensaje de avance (opcional, se envía con el aviso)</label>
+           <textarea name="progressNote" placeholder="Ej: Estamos revisando el problema con el equipo de datos."></textarea>
            <label>Prioridad</label>
            <select name="priority">${priorityOptions}</select>
            <label>Nota de solución (se envía al usuario al resolver)</label>
@@ -368,6 +375,13 @@ async function renderTicketDetail(id: string, flash?: string): Promise<string | 
            <label>Nota interna (solo visible aquí)</label>
            <textarea name="adminNote">${escapeHtml(ticket.adminNote ?? '')}</textarea>
            <button type="submit">Guardar cambios</button>
+         </form>
+         <h2 style="margin-top:18px">Pedir más detalles</h2>
+         <form class="ticket" method="post" action="/admin/tickets/${ticket.id}/request-info">
+           <label>Pregunta para el usuario (opcional — si la dejas vacía, Vivo pide detalles genéricos)</label>
+           <textarea name="question" placeholder="Ej: ¿En qué navegador te pasa y qué mensaje de error ves exactamente?"></textarea>
+           <button type="submit">Enviar solicitud por Slack</button>
+           <div class="hint">La respuesta del usuario llega a su chat con Vivo (visible en “Chat” de este usuario).</div>
          </form>
        </section>
      </div>`,
@@ -493,8 +507,14 @@ export function registerOAuthRoutes(router: IRouter): void {
       const flash = req.query.saved
         ? req.query.notified === '1'
           ? 'Ticket actualizado. El usuario fue notificado por Slack.'
-          : 'Ticket actualizado.'
-        : undefined;
+          : req.query.progress === '1'
+            ? 'Ticket actualizado. Se le avisó al usuario por Slack que su caso está en proceso.'
+            : 'Ticket actualizado.'
+        : req.query.asked === '1'
+          ? 'Se le pidió más información al usuario por Slack.'
+          : req.query.asked === '0'
+            ? 'No se pudo enviar la solicitud por Slack. Inténtalo de nuevo.'
+            : undefined;
       const html = await renderTicketDetail(req.params.id, flash);
       if (!html) {
         res.status(404).send('Ticket not found');
@@ -529,15 +549,34 @@ export function registerOAuthRoutes(router: IRouter): void {
           priority,
           adminNote: body.adminNote,
           resolutionNote: body.resolutionNote,
+          notifyInProgress: body.notifyInProgress === '1',
+          progressNote: body.progressNote,
         });
         if (!updated) {
           res.status(404).send('Ticket not found');
           return;
         }
         const notified = updated.notifiedAt && status === 'resolved' ? '&notified=1' : '';
-        res.redirect(`/admin/tickets/${updated.id}?saved=1${notified}`);
+        const progress = updated.progressNotified ? '&progress=1' : '';
+        res.redirect(`/admin/tickets/${updated.id}?saved=1${notified}${progress}`);
       } catch (err) {
         console.error('[admin] ticket update failed:', (err as Error).message);
+        res.status(500).send('Internal error');
+      }
+    },
+  );
+
+  router.post(
+    '/admin/tickets/:id/request-info',
+    express.urlencoded({ extended: false }),
+    async (req: Request, res: Response) => {
+      if (!requireAdmin(req, res)) return;
+      try {
+        const body = req.body as Record<string, string | undefined>;
+        const sent = await requestTicketInfo(req.params.id, body.question);
+        res.redirect(`/admin/tickets/${req.params.id}?asked=${sent ? '1' : '0'}`);
+      } catch (err) {
+        console.error('[admin] ticket request-info failed:', (err as Error).message);
         res.status(500).send('Internal error');
       }
     },
