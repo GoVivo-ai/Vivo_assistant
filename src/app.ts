@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import express, { type Express, type IRouter, type Request, type Response } from 'express';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { buildTicketMcpServer } from './mcp/ticketMcp';
 import { DateTime } from 'luxon';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
@@ -581,6 +583,43 @@ export function registerOAuthRoutes(router: IRouter): void {
       }
     },
   );
+
+  // MCP endpoint (stateless streamable HTTP): lets an external agent such as
+  // Claude Code manage tickets with the same service layer as the admin panel.
+  // Auth: Authorization: Bearer <ADMIN_DASHBOARD_KEY>.
+  router.post('/mcp', express.json({ limit: '1mb' }), async (req: Request, res: Response) => {
+    const key = env.ADMIN_DASHBOARD_KEY;
+    const provided = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const a = Buffer.from(provided);
+    const b = Buffer.from(key ?? '');
+    if (!key || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'Unauthorized' },
+        id: null,
+      });
+      return;
+    }
+    try {
+      const server = buildTicketMcpServer();
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      res.on('close', () => {
+        void transport.close();
+        void server.close();
+      });
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (err) {
+      console.error('[mcp] request failed:', (err as Error).message);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal error' },
+          id: null,
+        });
+      }
+    }
+  });
 
   router.get('/', (_req: Request, res: Response) => {
     res.send(
