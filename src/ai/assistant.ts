@@ -6,12 +6,14 @@ import { getCalendarEvents } from '../tools/googleCalendar';
 import { getMyClickUpTasks, searchClickUpTasks } from '../tools/clickup';
 import { getOrCreateUser, type SlackProfile } from '../services/userService';
 import { logAudit } from '../services/auditService';
-import { createTicket, listUserTickets } from '../services/ticketService';
+import { addTicketAttachments, createTicket, listUserTickets } from '../services/ticketService';
+import { stashPendingFiles, takePendingFiles } from '../services/attachmentStore';
 import { prisma } from '../db/prisma';
 import {
   NotConnectedError,
   RateLimitError,
   ReconnectRequiredError,
+  type SlackImageFile,
 } from '../types';
 import {
   connectPrompt,
@@ -77,11 +79,23 @@ export async function handleAssistantQuery(
   text: string,
   profile?: SlackProfile,
   source: 'dm' | 'mention' = 'dm',
+  files: SlackImageFile[] = [],
 ): Promise<string> {
   const user = await getOrCreateUser(slackUserId, slackTeamId, profile);
+
+  // Screenshot with no text: keep it on hand for the ticket and ask for details.
+  if (!text && files.length > 0) {
+    stashPendingFiles(user.id, files);
+    const reply = t('es').screenshotReceived;
+    await saveChatMessage(user.id, source, '[pantallazo adjunto]', reply, 'screenshot');
+    return reply;
+  }
+
   const intent = await routeIntent(text);
-  const reply = await executeIntent(user, intent, text);
-  await saveChatMessage(user.id, source, text, reply, intent.intent);
+  const reply = await executeIntent(user, intent, text, files);
+  const storedText =
+    files.length > 0 ? `${text} [+${files.length} pantallazo(s) adjunto(s)]` : text;
+  await saveChatMessage(user.id, source, storedText, reply, intent.intent);
   return reply;
 }
 
@@ -89,8 +103,16 @@ async function executeIntent(
   user: { id: string; name: string | null },
   intent: Awaited<ReturnType<typeof routeIntent>>,
   text: string,
+  files: SlackImageFile[] = [],
 ): Promise<string> {
   const lang = intent.lang;
+
+  // Screenshots that don't land on a ticket this turn stay available for the
+  // next 30 minutes, so "aquí va el pantallazo" + description in two messages
+  // still ends up attached.
+  if (files.length > 0 && intent.intent !== 'open_ticket') {
+    stashPendingFiles(user.id, files);
+  }
 
   try {
     switch (intent.intent) {
@@ -160,6 +182,7 @@ async function executeIntent(
         const title = intent.title?.trim();
         const description = intent.description?.trim();
         if (!title || !description) {
+          stashPendingFiles(user.id, files);
           await logAudit({ userId: user.id, action: 'ticket.prompt', query: text, status: 'success' });
           return t(lang).ticketAsk;
         }
@@ -171,13 +194,18 @@ async function executeIntent(
           priority: intent.priority,
           lang,
         });
+        const allFiles = [...files, ...takePendingFiles(user.id)].filter(
+          (f, i, arr) => arr.findIndex((o) => o.slackFileId === f.slackFileId) === i,
+        );
+        const attached = await addTicketAttachments(ticket.id, allFiles);
         await logAudit({
           userId: user.id,
           action: 'ticket.open',
-          query: `#${ticket.number} ${intent.category}/${intent.priority}: ${intent.title}`,
+          query: `#${ticket.number} ${intent.category}/${intent.priority}: ${intent.title}${attached ? ` [+${attached} adjuntos]` : ''}`,
           status: 'success',
         });
-        return formatTicketOpened(ticket, lang);
+        const reply = formatTicketOpened(ticket, lang);
+        return attached > 0 ? `${reply}\n${t(lang).ticketAttachments(attached)}` : reply;
       }
 
       case 'ticket_status': {

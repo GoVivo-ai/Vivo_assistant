@@ -1,6 +1,7 @@
 import { WebClient } from '@slack/web-api';
 import { prisma } from '../db/prisma';
 import { env } from '../config/env';
+import type { SlackImageFile } from '../types';
 
 export type TicketCategory =
   | 'access'
@@ -69,8 +70,39 @@ export async function countTicketsByStatus(): Promise<Record<TicketStatus, numbe
 export async function getTicket(id: string) {
   return prisma.ticket.findUnique({
     where: { id },
-    include: { user: { select: { id: true, name: true, email: true, slackUserId: true } } },
+    include: {
+      user: { select: { id: true, name: true, email: true, slackUserId: true } },
+      attachments: { orderBy: { createdAt: 'asc' } },
+    },
   });
+}
+
+/** Links Slack screenshots to a ticket. Best-effort: never fails the ticket. */
+export async function addTicketAttachments(
+  ticketId: string,
+  files: SlackImageFile[],
+): Promise<number> {
+  if (files.length === 0) return 0;
+  try {
+    const result = await prisma.ticketAttachment.createMany({
+      data: files.map((f) => ({
+        ticketId,
+        slackFileId: f.slackFileId,
+        name: f.name,
+        mimetype: f.mimetype,
+        urlPrivate: f.urlPrivate,
+        size: f.size,
+      })),
+    });
+    return result.count;
+  } catch (err) {
+    console.error('[tickets] failed to store attachments:', (err as Error).message);
+    return 0;
+  }
+}
+
+export async function getTicketAttachment(id: string) {
+  return prisma.ticketAttachment.findUnique({ where: { id } });
 }
 
 export interface TicketUpdateInput {

@@ -10,6 +10,7 @@ import { adminShell, loginPage, logomarkSvg, publicPage } from './admin/ui';
 import {
   countTicketsByStatus,
   getTicket,
+  getTicketAttachment,
   listTickets,
   updateTicket,
   TICKET_PRIORITIES,
@@ -338,6 +339,21 @@ async function renderTicketDetail(id: string, flash?: string): Promise<string | 
          <ul class="timeline">${timeline}</ul>
          <h2 style="margin-top:14px">Descripción</h2>
          <div class="desc">${escapeHtml(ticket.description)}</div>
+         ${
+           ticket.attachments.length > 0
+             ? `<h2 style="margin-top:14px">Pantallazos (${ticket.attachments.length})</h2>
+                <div style="display:flex;flex-wrap:wrap;gap:10px">
+                  ${ticket.attachments
+                    .map(
+                      (a) => `<a href="/admin/files/${a.id}" target="_blank" title="${escapeHtml(a.name)}">
+                        <img src="/admin/files/${a.id}" alt="${escapeHtml(a.name)}"
+                          style="max-width:220px;max-height:160px;border-radius:10px;border:1px solid rgba(0,0,0,.12);object-fit:cover;display:block">
+                      </a>`,
+                    )
+                    .join('\n')}
+                </div>`
+             : ''
+         }
        </section>
        <section class="card fade-in" style="margin:0">
          <h2>Gestionar ticket</h2>
@@ -440,6 +456,33 @@ export function registerOAuthRoutes(router: IRouter): void {
       res.send(await renderTicketList(status));
     } catch (err) {
       console.error('[admin] ticket list render failed:', (err as Error).message);
+      res.status(500).send('Internal error');
+    }
+  });
+
+  // Serves ticket screenshots. Slack's url_private requires the bot token,
+  // so the browser can't load it directly — this proxies it behind the
+  // admin session.
+  router.get('/admin/files/:id', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const attachment = await getTicketAttachment(req.params.id);
+      if (!attachment) {
+        res.status(404).send('Not found');
+        return;
+      }
+      const upstream = await fetch(attachment.urlPrivate, {
+        headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      });
+      if (!upstream.ok || !upstream.body) {
+        res.status(502).send('Could not fetch file from Slack');
+        return;
+      }
+      res.set('Content-Type', attachment.mimetype);
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      console.error('[admin] file proxy failed:', (err as Error).message);
       res.status(500).send('Internal error');
     }
   });

@@ -38,7 +38,11 @@ const S = {
     reconnect: (name: string) =>
       `Your ${name} connection has expired. Please reconnect it with \`/vivo-connect\`.`,
     ticketAsk:
-      '🎫 Sure! Tell me what is going on — describe the problem you are having with the Martech app (what fails, since when, any error message) and I will open the ticket right away.',
+      '🎫 Sure! Tell me what is going on — describe the problem you are having with the Martech app (what fails, since when, any error message) and I will open the ticket right away. You can also attach a screenshot of the error and I will include it in the ticket. 📸',
+    screenshotReceived:
+      '📸 Got your screenshot! Now describe the problem (what fails, since when) and I will open the ticket with the image attached.',
+    ticketAttachments: (n: number) =>
+      n === 1 ? '📎 I attached your screenshot to the ticket.' : `📎 I attached your ${n} screenshots to the ticket.`,
     ticketOpened: (n: number) => `🎫 Done! I opened ticket *#${n}* for you:`,
     ticketFollowup:
       'The team has been notified and I will DM you here as soon as it is resolved. You can ask me "how is my ticket going?" anytime.',
@@ -82,7 +86,11 @@ const S = {
     reconnect: (name: string) =>
       `Tu conexión con ${name} expiró. Vuelve a conectarla con \`/vivo-connect\`.`,
     ticketAsk:
-      '🎫 ¡Claro! Cuéntame qué está pasando — descríbeme el problema que tienes con la app de Martech (qué falla, desde cuándo, algún mensaje de error) y te abro el ticket de una vez.',
+      '🎫 ¡Claro! Cuéntame qué está pasando — descríbeme el problema que tienes con la app de Martech (qué falla, desde cuándo, algún mensaje de error) y te abro el ticket de una vez. También puedes adjuntar un pantallazo del error y lo incluyo en el ticket. 📸',
+    screenshotReceived:
+      '📸 ¡Recibí tu pantallazo! Ahora descríbeme el problema (qué falla, desde cuándo) y abro el ticket con la imagen adjunta.',
+    ticketAttachments: (n: number) =>
+      n === 1 ? '📎 Adjunté tu pantallazo al ticket.' : `📎 Adjunté tus ${n} pantallazos al ticket.`,
     ticketOpened: (n: number) => `🎫 ¡Listo! Abrí el ticket *#${n}* por ti:`,
     ticketFollowup:
       'El equipo ya fue notificado y te escribiré por aquí en cuanto esté solucionado. Puedes preguntarme "¿cómo va mi ticket?" cuando quieras.',

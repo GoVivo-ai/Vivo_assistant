@@ -17,29 +17,34 @@
       {
         "command": "/vivo-connect",
         "description": "Connect your Google & ClickUp accounts",
-        "should_escape": false
+        "should_escape": false,
+        "url": "https://vivo-assistant.vercel.app/slack/events"
       },
       {
         "command": "/vivo-disconnect",
         "description": "Remove your connected accounts (optionally: google | clickup)",
         "usage_hint": "[google|clickup]",
-        "should_escape": false
+        "should_escape": false,
+        "url": "https://vivo-assistant.vercel.app/slack/events"
       },
       {
         "command": "/vivo-whoami",
         "description": "Show your connected accounts",
-        "should_escape": false
+        "should_escape": false,
+        "url": "https://vivo-assistant.vercel.app/slack/events"
       },
       {
         "command": "/vivo-help",
         "description": "Show what Vivo Assistant can do",
-        "should_escape": false
+        "should_escape": false,
+        "url": "https://vivo-assistant.vercel.app/slack/events"
       },
       {
         "command": "/vivo-reset",
         "description": "Erase all your data and start fresh (asks for confirmation)",
         "usage_hint": "[confirm]",
-        "should_escape": false
+        "should_escape": false,
+        "url": "https://vivo-assistant.vercel.app/slack/events"
       }
     ]
   },
@@ -58,13 +63,18 @@
   },
   "settings": {
     "event_subscriptions": {
-      "bot_events": ["app_mention", "message.im"]
+      "bot_events": [
+        "app_mention",
+        "message.im"
+      ],
+      "request_url": "https://vivo-assistant.vercel.app/slack/events"
     },
     "interactivity": {
-      "is_enabled": true
+      "is_enabled": true,
+      "request_url": "https://vivo-assistant.vercel.app/slack/events"
     },
     "org_deploy_enabled": false,
-    "socket_mode_enabled": true,
+    "socket_mode_enabled": false,
     "token_rotation_enabled": false
   }
 }

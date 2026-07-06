@@ -61,3 +61,12 @@ export type CalendarRange = 'today' | 'tomorrow' | 'this_week' | 'next_week' | '
 export type DriveSearchType = 'file' | 'folder' | 'any';
 export type ClickUpTaskStatusFilter = 'open' | 'in_progress' | 'overdue' | 'all';
 export type ClickUpTaskRange = 'today' | 'this_week' | 'all';
+
+/** Image attached to a Slack message (screenshot of an error, etc.). */
+export interface SlackImageFile {
+  slackFileId: string;
+  name: string;
+  mimetype: string;
+  urlPrivate: string;
+  size: number;
+}
