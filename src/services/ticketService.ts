@@ -200,11 +200,55 @@ export async function requestTicketInfo(id: string, question?: string): Promise<
         ].join('');
   try {
     await dmUser(ticket.user.slackUserId, text);
+    // Mark the pending request so the assistant can route the user's next
+    // reply back to this ticket (see attachInfoReply / listTicketsAwaitingInfo).
+    await prisma.ticket.update({
+      where: { id },
+      data: { infoRequestedAt: new Date(), infoQuestion: ask ?? null },
+    });
     return true;
   } catch (err) {
     console.error('[tickets] failed to request more info:', (err as Error).message);
     return false;
   }
+}
+
+/** Open/in-progress tickets of this user with an unanswered info request. */
+export async function listTicketsAwaitingInfo(userId: string) {
+  return prisma.ticket.findMany({
+    where: {
+      userId,
+      infoRequestedAt: { not: null },
+      status: { in: ['open', 'in_progress'] },
+    },
+    orderBy: { infoRequestedAt: 'desc' },
+  });
+}
+
+/**
+ * Attaches the user's reply to the ticket it answers: appends it to the
+ * description (visible in the admin panel and over MCP), stores any
+ * screenshots, and clears the pending-info flag.
+ */
+export async function attachInfoReply(
+  ticketId: string,
+  reply: string,
+  files: SlackImageFile[] = [],
+): Promise<{ number: number; attached: number } | null> {
+  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+  if (!ticket) return null;
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const addition = `\n\n— Respuesta del usuario (${stamp} UTC) —\n${reply.trim()}`;
+  await prisma.ticket.update({
+    where: { id: ticketId },
+    data: {
+      description: (ticket.description + addition).slice(0, MAX_DESCRIPTION),
+      infoRequestedAt: null,
+      infoQuestion: null,
+    },
+  });
+  const attached = await addTicketAttachments(ticketId, files);
+  return { number: ticket.number, attached };
 }
 
 /** DMs the ticket owner that their ticket is being worked on. Returns true on success. */

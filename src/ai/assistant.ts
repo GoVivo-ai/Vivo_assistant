@@ -1,4 +1,4 @@
-import { callModel, routeIntent, type Lang } from './intentRouter';
+import { callModel, matchInfoReply, routeIntent, type Lang } from './intentRouter';
 import { chatSystemPrompt, type ChatUserContext } from './prompts';
 import { listConnections } from '../services/connectionService';
 import { searchDriveFiles } from '../tools/googleDrive';
@@ -6,8 +6,15 @@ import { getCalendarEvents } from '../tools/googleCalendar';
 import { getMyClickUpTasks, searchClickUpTasks } from '../tools/clickup';
 import { getOrCreateUser, type SlackProfile } from '../services/userService';
 import { logAudit } from '../services/auditService';
-import { addTicketAttachments, createTicket, listUserTickets } from '../services/ticketService';
+import {
+  addTicketAttachments,
+  attachInfoReply,
+  createTicket,
+  listTicketsAwaitingInfo,
+  listUserTickets,
+} from '../services/ticketService';
 import { stashPendingFiles, takePendingFiles } from '../services/attachmentStore';
+import { stashInfoReply, takeInfoReply } from '../services/infoReplyStore';
 import { prisma } from '../db/prisma';
 import {
   NotConnectedError,
@@ -91,12 +98,77 @@ export async function handleAssistantQuery(
     return reply;
   }
 
-  const intent = await routeIntent(text);
-  const reply = await executeIntent(user, intent, text, files);
   const storedText =
     files.length > 0 ? `${text} [+${files.length} pantallazo(s) adjunto(s)]` : text;
+
+  // If the support team asked this user for more info on a ticket, try to
+  // route this message back to that ticket before the normal intent flow.
+  const infoReply = await maybeCaptureInfoReply(user.id, text, files);
+  if (infoReply) {
+    await saveChatMessage(user.id, source, storedText, infoReply, 'ticket_info');
+    return infoReply;
+  }
+
+  const intent = await routeIntent(text);
+  const reply = await executeIntent(user, intent, text, files);
   await saveChatMessage(user.id, source, storedText, reply, intent.intent);
   return reply;
+}
+
+/**
+ * Routes a message that answers a pending "we need more info" ticket request
+ * back to its ticket. Returns the reply to send, or null when the message is
+ * unrelated (normal intent routing takes over). With several pending tickets
+ * and no clear match, it asks the user which ticket the answer is for and
+ * stashes the text until they say the number.
+ */
+async function maybeCaptureInfoReply(
+  userId: string,
+  text: string,
+  files: SlackImageFile[],
+): Promise<string | null> {
+  const pendingTickets = await listTicketsAwaitingInfo(userId);
+  if (pendingTickets.length === 0) return null;
+
+  const match = await matchInfoReply(text, pendingTickets);
+
+  if (match.verdict === 'unrelated') return null;
+
+  if (match.verdict === 'answer') {
+    const ticket = pendingTickets.find((tk) => tk.number === match.ticketNumber);
+    if (!ticket) return null;
+    const lang: Lang = ticket.lang === 'en' ? 'en' : 'es';
+    // A stashed earlier answer (from the "which ticket?" round trip) rides along.
+    const stashed = takeInfoReply(userId);
+    const fullText = stashed?.text ? `${stashed.text}\n${text}` : text;
+    const allFiles = [...(stashed?.files ?? []), ...files].filter(
+      (f, i, arr) => arr.findIndex((o) => o.slackFileId === f.slackFileId) === i,
+    );
+    const result = await attachInfoReply(ticket.id, fullText, allFiles);
+    if (!result) return null;
+    await logAudit({
+      userId,
+      action: 'ticket.info_reply',
+      query: `#${ticket.number}${result.attached ? ` [+${result.attached} adjuntos]` : ''}`,
+      status: 'success',
+    });
+    return lang === 'es'
+      ? `📎 ¡Gracias! Agregué tu respuesta al ticket *#${ticket.number}* — _${ticket.title}_.${
+          result.attached > 0 ? ` También adjunté ${result.attached} pantallazo(s).` : ''
+        } El equipo la revisará y te aviso por aquí cuando haya novedades. 🙌`
+      : `📎 Thanks! I added your reply to ticket *#${ticket.number}* — _${ticket.title}_.${
+          result.attached > 0 ? ` I also attached ${result.attached} screenshot(s).` : ''
+        } The team will review it and I will keep you posted here. 🙌`;
+  }
+
+  // Ambiguous: keep the answer on hand and ask which ticket it belongs to.
+  stashInfoReply(userId, text, files);
+  const lang: Lang = pendingTickets.some((tk) => tk.lang === 'en') ? 'en' : 'es';
+  const options = pendingTickets.map((tk) => `• *#${tk.number}* — _${tk.title}_`).join('\n');
+  await logAudit({ userId, action: 'ticket.info_reply', query: 'ambiguous', status: 'empty' });
+  return lang === 'es'
+    ? `Tengo tu respuesta 🙌 pero te pedimos información de varios tickets y quiero guardarla en el correcto:\n${options}\n¿A cuál corresponde? Respóndeme con el número (por ejemplo *#${pendingTickets[0].number}*).`
+    : `Got your reply 🙌 but we asked for information on more than one ticket and I want to file it under the right one:\n${options}\nWhich one is it for? Reply with the number (e.g. *#${pendingTickets[0].number}*).`;
 }
 
 async function executeIntent(

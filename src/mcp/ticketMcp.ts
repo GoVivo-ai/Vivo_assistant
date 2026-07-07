@@ -139,7 +139,7 @@ export function buildTicketMcpServer(): McpServer {
     {
       title: 'Ask the reporter for more details',
       description:
-        'DMs the ticket reporter asking for more information. Pass a specific question (in the ticket lang) or omit it for a generic ask. The reply arrives in their normal Vivo chat.',
+        'DMs the ticket reporter asking for more information. Pass a specific question (in the ticket lang) or omit it for a generic ask. Their reply is automatically appended to the ticket description (with any screenshots attached); check the ticket again later.',
       inputSchema: {
         id: z.string(),
         question: z.string().optional(),

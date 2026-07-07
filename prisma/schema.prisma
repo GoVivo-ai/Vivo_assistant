@@ -47,6 +47,10 @@ model Ticket {
   lang           String    @default("es") // language the user opened the ticket in
   adminNote      String? // internal notes, never sent to the user
   resolutionNote String? // sent to the user when resolved
+  // Pending "we need more info" request: when the DM was sent and what was
+  // asked. Cleared once the user's reply is attached to the ticket.
+  infoRequestedAt DateTime?
+  infoQuestion    String?
   resolvedAt     DateTime?
   notifiedAt     DateTime? // when the Slack DM about the resolution was delivered
   createdAt      DateTime  @default(now())
