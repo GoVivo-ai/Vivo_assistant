@@ -187,23 +187,31 @@ async function renderUserChat(userId: string): Promise<string | null> {
 
   const messages = [...user.chatMessages].reverse();
   const bubbles = messages
-    .map(
-      (m) => `
+    .map((m) => {
+      // Outbound-only messages (e.g. ticket DMs) have no user text — render
+      // just the bot bubble instead of an empty user bubble.
+      const userBubble = m.userText
+        ? `
       <div class="msg user">
         <div class="avatar user-av">${userInitials}</div>
         <div>
           <div class="bubble">${escapeHtml(m.userText)}</div>
           <div class="meta">${fmtTs(m.createdAt)} · ${m.source}</div>
         </div>
-      </div>
+      </div>`
+        : '';
+      const botMeta = m.userText
+        ? `<span class="chip">${escapeHtml(m.intent ?? '?')}</span>`
+        : `${fmtTs(m.createdAt)} · <span class="chip">${escapeHtml(m.intent ?? m.source)}</span>`;
+      return `${userBubble}
       <div class="msg bot">
         ${botAvatar}
         <div>
           <div class="bubble">${escapeHtml(m.botReply)}</div>
-          <div class="meta"><span class="chip">${escapeHtml(m.intent ?? '?')}</span></div>
+          <div class="meta">${botMeta}</div>
         </div>
-      </div>`,
-    )
+      </div>`;
+    })
     .join('\n');
 
   const badges =
