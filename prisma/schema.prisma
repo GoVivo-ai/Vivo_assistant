@@ -85,6 +85,9 @@ model ChatMessage {
   userText  String
   botReply  String
   intent    String?
+  // JSON array of Slack image files sent with the message, so the admin chat
+  // view can render the screenshots via /admin/chat-files/:id/:idx.
+  filesJson String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

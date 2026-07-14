@@ -171,6 +171,33 @@ async function renderUserList(): Promise<string> {
   });
 }
 
+interface ChatFile {
+  slackFileId: string;
+  name: string;
+  mimetype: string;
+  urlPrivate: string;
+}
+
+/** Parses ChatMessage.filesJson defensively — bad data renders no images. */
+function parseChatFiles(filesJson: string | null): ChatFile[] {
+  if (!filesJson) return [];
+  try {
+    const parsed = JSON.parse(filesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((f) => f as Record<string, unknown>)
+      .filter((f) => typeof f.urlPrivate === 'string' && typeof f.mimetype === 'string')
+      .map((f) => ({
+        slackFileId: String(f.slackFileId ?? ''),
+        name: String(f.name ?? 'screenshot'),
+        mimetype: String(f.mimetype),
+        urlPrivate: String(f.urlPrivate),
+      }));
+  } catch {
+    return [];
+  }
+}
+
 async function renderUserChat(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -188,6 +215,14 @@ async function renderUserChat(userId: string): Promise<string | null> {
   const messages = [...user.chatMessages].reverse();
   const bubbles = messages
     .map((m) => {
+      const images = parseChatFiles(m.filesJson)
+        .map(
+          (f, i) => `<a href="/admin/chat-files/${m.id}/${i}" target="_blank" title="${escapeHtml(f.name)}">
+            <img src="/admin/chat-files/${m.id}/${i}" alt="${escapeHtml(f.name)}"
+              style="max-width:220px;max-height:160px;border-radius:10px;border:1px solid rgba(0,0,0,.12);object-fit:cover;display:block">
+          </a>`,
+        )
+        .join('\n');
       // Outbound-only messages (e.g. ticket DMs) have no user text — render
       // just the bot bubble instead of an empty user bubble.
       const userBubble = m.userText
@@ -196,6 +231,7 @@ async function renderUserChat(userId: string): Promise<string | null> {
         <div class="avatar user-av">${userInitials}</div>
         <div>
           <div class="bubble">${escapeHtml(m.userText)}</div>
+          ${images ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;justify-content:flex-end">${images}</div>` : ''}
           <div class="meta">${fmtTs(m.createdAt)} · ${m.source}</div>
         </div>
       </div>`
@@ -507,6 +543,38 @@ export function registerOAuthRoutes(router: IRouter): void {
       res.send(Buffer.from(await upstream.arrayBuffer()));
     } catch (err) {
       console.error('[admin] file proxy failed:', (err as Error).message);
+      res.status(500).send('Internal error');
+    }
+  });
+
+  // Serves screenshots sent in chat (same Slack url_private proxy as above,
+  // but sourced from the ChatMessage the image arrived with).
+  router.get('/admin/chat-files/:id/:idx', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const message = await prisma.chatMessage.findUnique({
+        where: { id: req.params.id },
+        select: { filesJson: true },
+      });
+      const files = parseChatFiles(message?.filesJson ?? null);
+      const idx = Number(req.params.idx);
+      const file = Number.isInteger(idx) ? files[idx] : undefined;
+      if (!file) {
+        res.status(404).send('Not found');
+        return;
+      }
+      const upstream = await fetch(file.urlPrivate, {
+        headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      });
+      if (!upstream.ok || !upstream.body) {
+        res.status(502).send('Could not fetch file from Slack');
+        return;
+      }
+      res.set('Content-Type', file.mimetype);
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      console.error('[admin] chat file proxy failed:', (err as Error).message);
       res.status(500).send('Internal error');
     }
   });

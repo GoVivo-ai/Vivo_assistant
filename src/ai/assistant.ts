@@ -59,6 +59,7 @@ async function saveChatMessage(
   userText: string,
   botReply: string,
   intent: string,
+  files: SlackImageFile[] = [],
 ): Promise<void> {
   try {
     await prisma.chatMessage.create({
@@ -68,6 +69,7 @@ async function saveChatMessage(
         userText: userText.slice(0, MAX_STORED_TEXT),
         botReply: botReply.slice(0, MAX_STORED_TEXT),
         intent,
+        filesJson: files.length > 0 ? JSON.stringify(files) : null,
       },
     });
   } catch (err) {
@@ -90,11 +92,17 @@ export async function handleAssistantQuery(
 ): Promise<string> {
   const user = await getOrCreateUser(slackUserId, slackTeamId, profile);
 
-  // Screenshot with no text: keep it on hand for the ticket and ask for details.
+  // Screenshot with no text: if a ticket is waiting for more info, attach it
+  // there; otherwise keep it on hand for the next ticket and ask for details.
   if (!text && files.length > 0) {
+    const ticketReply = await captureScreenshotOnlyReply(user.id, files);
+    if (ticketReply) {
+      await saveChatMessage(user.id, source, '[pantallazo adjunto]', ticketReply, 'ticket_info', files);
+      return ticketReply;
+    }
     stashPendingFiles(user.id, files);
     const reply = t('es').screenshotReceived;
-    await saveChatMessage(user.id, source, '[pantallazo adjunto]', reply, 'screenshot');
+    await saveChatMessage(user.id, source, '[pantallazo adjunto]', reply, 'screenshot', files);
     return reply;
   }
 
@@ -105,14 +113,48 @@ export async function handleAssistantQuery(
   // route this message back to that ticket before the normal intent flow.
   const infoReply = await maybeCaptureInfoReply(user.id, text, files);
   if (infoReply) {
-    await saveChatMessage(user.id, source, storedText, infoReply, 'ticket_info');
+    await saveChatMessage(user.id, source, storedText, infoReply, 'ticket_info', files);
     return infoReply;
   }
 
   const intent = await routeIntent(text);
   const reply = await executeIntent(user, intent, text, files);
-  await saveChatMessage(user.id, source, storedText, reply, intent.intent);
+  await saveChatMessage(user.id, source, storedText, reply, intent.intent, files);
   return reply;
+}
+
+/**
+ * Handles a screenshot sent with no text while the support team is waiting
+ * for more info on a ticket. With a single pending ticket the screenshot is
+ * attached right away (the info request stays open so a follow-up text still
+ * routes to the ticket). With several, it is stashed and the user is asked
+ * which ticket it belongs to. Returns null when no ticket is awaiting info.
+ */
+async function captureScreenshotOnlyReply(
+  userId: string,
+  files: SlackImageFile[],
+): Promise<string | null> {
+  const pendingTickets = await listTicketsAwaitingInfo(userId);
+  if (pendingTickets.length === 0) return null;
+
+  if (pendingTickets.length === 1) {
+    const ticket = pendingTickets[0];
+    const lang: Lang = ticket.lang === 'en' ? 'en' : 'es';
+    const attached = await addTicketAttachments(ticket.id, files);
+    if (attached === 0) return null;
+    await logAudit({
+      userId,
+      action: 'ticket.info_reply',
+      query: `#${ticket.number} [+${attached} adjuntos]`,
+      status: 'success',
+    });
+    return lang === 'es'
+      ? `📎 ¡Recibido! Adjunté ${attached === 1 ? 'tu pantallazo' : `tus ${attached} pantallazos`} al ticket *#${ticket.number}* — _${ticket.title}_. Si quieres agregar más detalles, escríbemelos por aquí. 🙌`
+      : `📎 Got it! I attached ${attached === 1 ? 'your screenshot' : `your ${attached} screenshots`} to ticket *#${ticket.number}* — _${ticket.title}_. If you want to add more details, just reply here. 🙌`;
+  }
+
+  stashInfoReply(userId, '', files);
+  return whichTicketPrompt(userId, pendingTickets);
 }
 
 /**
@@ -138,10 +180,11 @@ async function maybeCaptureInfoReply(
     const ticket = pendingTickets.find((tk) => tk.number === match.ticketNumber);
     if (!ticket) return null;
     const lang: Lang = ticket.lang === 'en' ? 'en' : 'es';
-    // A stashed earlier answer (from the "which ticket?" round trip) rides along.
+    // A stashed earlier answer (from the "which ticket?" round trip) and any
+    // screenshot sent on its own moments before ride along with this reply.
     const stashed = takeInfoReply(userId);
     const fullText = stashed?.text ? `${stashed.text}\n${text}` : text;
-    const allFiles = [...(stashed?.files ?? []), ...files].filter(
+    const allFiles = [...(stashed?.files ?? []), ...files, ...takePendingFiles(userId)].filter(
       (f, i, arr) => arr.findIndex((o) => o.slackFileId === f.slackFileId) === i,
     );
     const result = await attachInfoReply(ticket.id, fullText, allFiles);
@@ -163,6 +206,14 @@ async function maybeCaptureInfoReply(
 
   // Ambiguous: keep the answer on hand and ask which ticket it belongs to.
   stashInfoReply(userId, text, files);
+  return whichTicketPrompt(userId, pendingTickets);
+}
+
+/** Asks the user which awaiting-info ticket their stashed reply belongs to. */
+async function whichTicketPrompt(
+  userId: string,
+  pendingTickets: Awaited<ReturnType<typeof listTicketsAwaitingInfo>>,
+): Promise<string> {
   const lang: Lang = pendingTickets.some((tk) => tk.lang === 'en') ? 'en' : 'es';
   const options = pendingTickets.map((tk) => `• *#${tk.number}* — _${tk.title}_`).join('\n');
   await logAudit({ userId, action: 'ticket.info_reply', query: 'ambiguous', status: 'empty' });
