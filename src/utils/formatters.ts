@@ -38,7 +38,7 @@ const S = {
     reconnect: (name: string) =>
       `Your ${name} connection has expired. Please reconnect it with \`/vivo-connect\`.`,
     ticketAsk:
-      '🎫 Sure! Tell me what is going on — describe the problem you are having with the Martech app (what fails, since when, any error message) and I will open the ticket right away. You can also attach a screenshot of the error and I will include it in the ticket. 📸',
+      '🎫 Sure! Tell me what is going on — describe the problem or what you need (a Martech app issue, an account or access request, or any request for the team: what happens / what you need, since when, who is involved) and I will open the ticket right away. You can also attach a screenshot of the error and I will include it in the ticket. 📸',
     screenshotReceived:
       '📸 Got your screenshot! Now describe the problem (what fails, since when) and I will open the ticket with the image attached.',
     ticketAttachments: (n: number) =>
@@ -48,7 +48,7 @@ const S = {
       'The team has been notified and I will DM you here as soon as it is resolved. You can ask me "how is my ticket going?" anytime.',
     ticketListIntro: 'Here are your latest tickets:',
     ticketListEmpty:
-      "You don't have any tickets yet. If something in the Martech app is failing, just describe the problem and I'll open one for you.",
+      "You don't have any tickets yet. If something is failing or you need anything from the team (Martech app, accounts, accesses, general requests), just describe it and I'll open one for you.",
     category: 'Category',
     ticketStatus: 'Status',
     opened: 'Opened',
@@ -86,7 +86,7 @@ const S = {
     reconnect: (name: string) =>
       `Tu conexión con ${name} expiró. Vuelve a conectarla con \`/vivo-connect\`.`,
     ticketAsk:
-      '🎫 ¡Claro! Cuéntame qué está pasando — descríbeme el problema que tienes con la app de Martech (qué falla, desde cuándo, algún mensaje de error) y te abro el ticket de una vez. También puedes adjuntar un pantallazo del error y lo incluyo en el ticket. 📸',
+      '🎫 ¡Claro! Cuéntame qué está pasando — descríbeme el problema o lo que necesitas (algo de la app de Martech, una cuenta o acceso, o cualquier solicitud para el equipo: qué pasa / qué necesitas, desde cuándo, quiénes están involucrados) y te abro el ticket de una vez. También puedes adjuntar un pantallazo del error y lo incluyo en el ticket. 📸',
     screenshotReceived:
       '📸 ¡Recibí tu pantallazo! Ahora descríbeme el problema (qué falla, desde cuándo) y abro el ticket con la imagen adjunta.',
     ticketAttachments: (n: number) =>
@@ -96,7 +96,7 @@ const S = {
       'El equipo ya fue notificado y te escribiré por aquí en cuanto esté solucionado. Puedes preguntarme "¿cómo va mi ticket?" cuando quieras.',
     ticketListIntro: 'Estos son tus últimos tickets:',
     ticketListEmpty:
-      'Aún no tienes tickets. Si algo en la app de Martech está fallando, descríbeme el problema y te abro uno.',
+      'Aún no tienes tickets. Si algo está fallando o necesitas algo del equipo (app de Martech, cuentas, accesos, solicitudes en general), descríbemelo y te abro uno.',
     category: 'Categoría',
     ticketStatus: 'Estado',
     opened: 'Abierto',
@@ -130,8 +130,8 @@ export function helpText(lang: Lang = 'en'): string {
       '• `muéstrame mis tareas vencidas`',
       '• `qué tareas tengo pendientes?`',
       '',
-      '*Soporte técnico*',
-      '• Describe cualquier problema con la app de Martech y abro un ticket por ti',
+      '*Soporte y solicitudes*',
+      '• Describe cualquier problema o solicitud (app de Martech, cuentas, accesos, etc.) y abro un ticket por ti',
       '• `cómo va mi ticket?` — consulta el estado de tus tickets',
       '',
       '*Comandos*',
@@ -159,8 +159,8 @@ export function helpText(lang: Lang = 'en'): string {
     '• `@Vivo Assistant show my overdue tasks`',
     '• `@Vivo Assistant what tasks do I have pending?`',
     '',
-    '*Tech support*',
-    '• Describe any problem with the Martech app and I will open a ticket for you',
+    '*Support & requests*',
+    '• Describe any problem or request (Martech app, accounts, accesses, etc.) and I will open a ticket for you',
     '• `how is my ticket going?` — check the status of your tickets',
     '',
     '*Commands*',

@@ -39,6 +39,47 @@ async function fetchProfile(client: WebClient, userId: string): Promise<SlackPro
   }
 }
 
+/**
+ * Normalizes Slack link syntax into plain text the AI can read:
+ * <mailto:a@b|a@b> -> a@b, <https://url|label> -> label, <https://url> -> url.
+ */
+function normalizeSlackLinks(text: string): string {
+  return text
+    .replace(/<mailto:([^|>]+)(?:\|[^>]*)?>/gi, '$1')
+    .replace(/<(https?:\/\/[^|>]+)\|([^>]+)>/gi, '$2')
+    .replace(/<(https?:\/\/[^|>]+)>/gi, '$1');
+}
+
+/**
+ * Removes the bot's own mention and replaces every other user mention with
+ * "@Real Name", so people referenced in a ticket survive into the AI text.
+ */
+async function resolveMentions(
+  client: WebClient,
+  text: string,
+  botUserId: string | undefined,
+): Promise<string> {
+  const mentionRe = /<@([A-Z0-9]+)(?:\|[^>]*)?>/g;
+  const ids = [...new Set(Array.from(text.matchAll(mentionRe), (m) => m[1]))];
+  const names = new Map<string, string>();
+  for (const id of ids) {
+    if (id === botUserId) {
+      names.set(id, '');
+      continue;
+    }
+    try {
+      const info = await client.users.info({ user: id });
+      names.set(id, `@${info.user?.real_name ?? info.user?.name ?? id}`);
+    } catch {
+      names.set(id, `@${id}`);
+    }
+  }
+  return text
+    .replace(mentionRe, (_match, id: string) => names.get(id) ?? '')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
 async function answer(
   client: WebClient,
   say: (msg: { text: string; thread_ts?: string }) => Promise<unknown>,
@@ -46,10 +87,11 @@ async function answer(
   slackTeamId: string,
   rawText: string,
   source: 'dm' | 'mention',
+  botUserId?: string,
   threadTs?: string,
   files: SlackImageFile[] = [],
 ): Promise<void> {
-  const text = rawText.replace(/<@[^>]+>/g, '').trim();
+  const text = normalizeSlackLinks(await resolveMentions(client, rawText, botUserId));
   if (!text && files.length === 0) {
     await say({ text: EMPTY_PROMPT_TEXT, thread_ts: threadTs });
     return;
@@ -75,6 +117,7 @@ export function registerEvents(app: App): void {
       context.teamId ?? event.team ?? 'unknown',
       event.text,
       'mention',
+      context.botUserId,
       event.thread_ts ?? event.ts,
       extractImageFiles(event),
     );
@@ -93,6 +136,7 @@ export function registerEvents(app: App): void {
       context.teamId ?? dm.team ?? 'unknown',
       dm.text ?? '',
       'dm',
+      context.botUserId,
       undefined,
       extractImageFiles(dm),
     );
