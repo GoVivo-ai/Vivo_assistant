@@ -10,6 +10,7 @@ import {
   addTicketAttachments,
   attachInfoReply,
   createTicket,
+  deleteUserTicket,
   listTicketsAwaitingInfo,
   listUserTickets,
 } from '../services/ticketService';
@@ -329,6 +330,45 @@ async function executeIntent(
         });
         const reply = formatTicketOpened(ticket, lang);
         return attached > 0 ? `${reply}\n${t(lang).ticketAttachments(attached)}` : reply;
+      }
+
+      case 'delete_ticket': {
+        // Ownership is enforced in deleteUserTicket: it only ever deletes a
+        // ticket whose userId matches the requesting user.
+        if (!intent.ticketNumber) {
+          const tickets = await listUserTickets(user.id);
+          await logAudit({ userId: user.id, action: 'ticket.delete', query: 'no number', status: 'empty' });
+          if (tickets.length === 0) {
+            return lang === 'es'
+              ? 'No tienes tickets registrados, así que no hay nada que eliminar. 🙌'
+              : 'You have no tickets on file, so there is nothing to delete. 🙌';
+          }
+          const options = tickets.map((tk) => `• *#${tk.number}* — _${tk.title}_`).join('\n');
+          return lang === 'es'
+            ? `Claro, ¿cuál ticket quieres eliminar?\n${options}\nDime por ejemplo: *elimina el ticket #${tickets[0].number}*.`
+            : `Sure — which ticket do you want to delete?\n${options}\nFor example: *delete ticket #${tickets[0].number}*.`;
+        }
+        const deleted = await deleteUserTicket(user.id, intent.ticketNumber);
+        if (!deleted) {
+          await logAudit({
+            userId: user.id,
+            action: 'ticket.delete',
+            query: `#${intent.ticketNumber}`,
+            status: 'empty',
+          });
+          return lang === 'es'
+            ? `No encontré un ticket *#${intent.ticketNumber}* abierto por ti — solo puedes eliminar tus propios tickets. Pregúntame "¿cómo van mis tickets?" para ver los tuyos.`
+            : `I could not find a ticket *#${intent.ticketNumber}* opened by you — you can only delete your own tickets. Ask me "how are my tickets?" to see yours.`;
+        }
+        await logAudit({
+          userId: user.id,
+          action: 'ticket.delete',
+          query: `#${intent.ticketNumber}: ${deleted.title}`,
+          status: 'success',
+        });
+        return lang === 'es'
+          ? `🗑️ Listo, eliminé tu ticket *#${intent.ticketNumber}* — _${deleted.title}_. Si el problema reaparece, descríbemelo y abro uno nuevo. 🙌`
+          : `🗑️ Done — I deleted your ticket *#${intent.ticketNumber}* — _${deleted.title}_. If the problem comes back, just describe it and I will open a new one. 🙌`;
       }
 
       case 'ticket_status': {

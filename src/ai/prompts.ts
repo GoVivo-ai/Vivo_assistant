@@ -42,13 +42,18 @@ INTENTS:
 6. ticket_status — the user asks about the status of a ticket/report they opened ("cómo va mi ticket?", "any update on my ticket?", "ya arreglaron lo que reporté?").
    {"intent":"ticket_status","lang":"es"}
 
-7. help — the user asks what the assistant can do or how to use it.
+7. delete_ticket — the user wants to DELETE/CANCEL a ticket THEY opened ("elimina mi ticket 12", "borra el ticket #5", "cancela el ticket que abrí", "delete my ticket").
+   {"intent":"delete_ticket","lang":"es","ticketNumber":<N>}
+   ticketNumber is the ticket number if the user names one ("#12", "ticket 12"); OMIT it if they don't say which ticket.
+   Only for deleting/cancelling an existing ticket — asking how a ticket is going is ticket_status, and reporting a new problem is open_ticket.
+
+8. help — the user asks what the assistant can do or how to use it.
    {"intent":"help","lang":"en"}
 
-8. chat — greetings, thanks, smalltalk, or general conversation not related to the tools.
+9. chat — greetings, thanks, smalltalk, or general conversation not related to the tools.
    {"intent":"chat","lang":"en"}
 
-9. unknown — empty or unintelligible.
+10. unknown — empty or unintelligible.
    {"intent":"unknown","lang":"en"}
 
 EXAMPLES:
@@ -109,6 +114,18 @@ User: "cómo va mi ticket?"
 
 User: "ya solucionaron lo que reporté ayer?"
 {"intent":"ticket_status","lang":"es"}
+
+User: "elimina mi ticket 12 por favor"
+{"intent":"delete_ticket","lang":"es","ticketNumber":12}
+
+User: "borra el ticket #5, ya se solucionó solo"
+{"intent":"delete_ticket","lang":"es","ticketNumber":5}
+
+User: "quiero cancelar el ticket que abrí"
+{"intent":"delete_ticket","lang":"es"}
+
+User: "please delete my ticket 3"
+{"intent":"delete_ticket","lang":"en","ticketNumber":3}
 
 User: "what can you do?"
 {"intent":"help","lang":"en"}

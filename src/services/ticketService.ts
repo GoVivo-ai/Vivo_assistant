@@ -101,6 +101,26 @@ export async function addTicketAttachments(
   }
 }
 
+/**
+ * Deletes a ticket by number ON BEHALF OF ITS OWNER. SECURITY INVARIANT: the
+ * delete is keyed on (number, userId), so a user can never delete someone
+ * else's ticket — for them it simply "does not exist". Attachments go with it
+ * (onDelete: Cascade). Returns the deleted ticket's title, or null when the
+ * ticket doesn't exist or belongs to another user.
+ */
+export async function deleteUserTicket(
+  userId: string,
+  ticketNumber: number,
+): Promise<{ title: string } | null> {
+  const ticket = await prisma.ticket.findFirst({
+    where: { number: ticketNumber, userId },
+    select: { id: true, title: true },
+  });
+  if (!ticket) return null;
+  await prisma.ticket.delete({ where: { id: ticket.id } });
+  return { title: ticket.title };
+}
+
 export async function getTicketAttachment(id: string) {
   return prisma.ticketAttachment.findUnique({ where: { id } });
 }

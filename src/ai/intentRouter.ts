@@ -46,6 +46,13 @@ const IntentSchema = z.discriminatedUnion('intent', [
     priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   }),
   z.object({ intent: z.literal('ticket_status'), lang: langField }),
+  z.object({
+    intent: z.literal('delete_ticket'),
+    lang: langField,
+    // Omitted when the user wants to delete a ticket but didn't say which —
+    // the assistant then lists their tickets and asks for the number.
+    ticketNumber: z.number().int().positive().optional(),
+  }),
   z.object({ intent: z.literal('help'), lang: langField }),
   z.object({ intent: z.literal('chat'), lang: langField }),
   z.object({ intent: z.literal('unknown'), lang: langField }),
