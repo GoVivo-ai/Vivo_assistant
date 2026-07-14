@@ -534,8 +534,12 @@ export function registerOAuthRoutes(router: IRouter): void {
       const upstream = await fetch(attachment.urlPrivate, {
         headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
       });
-      if (!upstream.ok || !upstream.body) {
-        res.status(502).send('Could not fetch file from Slack');
+      // Without the files:read scope Slack answers 200 with an HTML login
+      // page — serve an explicit error instead of a broken image.
+      if (!upstream.ok || !upstream.headers.get('content-type')?.startsWith('image/')) {
+        res
+          .status(502)
+          .send('Could not fetch file from Slack — check the bot token has the files:read scope');
         return;
       }
       res.set('Content-Type', attachment.mimetype);
@@ -566,8 +570,10 @@ export function registerOAuthRoutes(router: IRouter): void {
       const upstream = await fetch(file.urlPrivate, {
         headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
       });
-      if (!upstream.ok || !upstream.body) {
-        res.status(502).send('Could not fetch file from Slack');
+      if (!upstream.ok || !upstream.headers.get('content-type')?.startsWith('image/')) {
+        res
+          .status(502)
+          .send('Could not fetch file from Slack — check the bot token has the files:read scope');
         return;
       }
       res.set('Content-Type', file.mimetype);

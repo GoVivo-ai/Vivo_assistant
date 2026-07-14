@@ -35,6 +35,7 @@ Internal Slack assistant for Vivo. Answers questions about **Google Drive files*
    - `app_mentions:read`
    - `chat:write`
    - `commands`
+   - `files:read` *(lets the admin panel download the screenshots users attach)*
    - `users:read`
    - `users:read.email` *(optional, lets the bot store the user's email)*
 3. **Slash Commands**, create (Request URL only needed in HTTP mode: `https://<APP_BASE_URL>/slack/events`):
