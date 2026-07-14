@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { aiModel, env } from '../config/env';
 import { companyNow } from '../utils/dates';
-import { routerSystemPrompt } from './prompts';
+import { routerSystemPrompt, infoMatcherPrompt, type PendingInfoTicket } from './prompts';
 
 const langField = z.enum(['es', 'en']).default('en');
 
@@ -127,5 +127,48 @@ export async function routeIntent(text: string): Promise<Intent> {
   } catch (err) {
     console.error('[intentRouter] routing failed:', (err as Error).message);
     return { intent: 'unknown', lang: guessLang(text) };
+  }
+}
+
+export type InfoReplyMatch =
+  | { verdict: 'answer'; ticketNumber: number }
+  | { verdict: 'ambiguous' }
+  | { verdict: 'unrelated' };
+
+const InfoReplySchema = z.union([
+  z.object({ verdict: z.literal('answer'), ticketNumber: z.number().int() }),
+  z.object({ verdict: z.literal('ambiguous') }),
+  z.object({ verdict: z.literal('unrelated') }),
+]);
+
+/**
+ * Decides whether `text` answers one of the user's pending "need more info"
+ * ticket requests. An explicit "#N" naming a pending ticket wins without a
+ * model call; otherwise the model matches the content against each pending
+ * question. On model failure: "ambiguous" (the assistant asks which ticket)
+ * so the user's information is never silently dropped.
+ */
+export async function matchInfoReply(
+  text: string,
+  tickets: PendingInfoTicket[],
+): Promise<InfoReplyMatch> {
+  const numbers = new Set(tickets.map((tk) => tk.number));
+  const explicit = text.match(/#\s?(\d{1,6})|\bticket\s+#?(\d{1,6})\b/i);
+  const explicitNumber = explicit ? Number(explicit[1] ?? explicit[2]) : null;
+  if (explicitNumber != null && numbers.has(explicitNumber)) {
+    return { verdict: 'answer', ticketNumber: explicitNumber };
+  }
+
+  try {
+    const raw = await callModel(infoMatcherPrompt(tickets), text, { json: true, maxTokens: 100 });
+    const parsed = InfoReplySchema.safeParse(JSON.parse(extractJson(raw)));
+    if (!parsed.success) return { verdict: 'ambiguous' };
+    if (parsed.data.verdict === 'answer' && !numbers.has(parsed.data.ticketNumber)) {
+      return { verdict: 'ambiguous' };
+    }
+    return parsed.data;
+  } catch (err) {
+    console.error('[intentRouter] info-reply match failed:', (err as Error).message);
+    return { verdict: 'ambiguous' };
   }
 }

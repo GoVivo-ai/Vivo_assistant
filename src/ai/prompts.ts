@@ -114,6 +114,42 @@ User: "jajaja buenísimo"
 {"intent":"chat","lang":"es"}`;
 }
 
+export interface PendingInfoTicket {
+  number: number;
+  title: string;
+  infoQuestion: string | null;
+}
+
+/**
+ * Decides whether a message answers one of the user's pending
+ * "we need more info" ticket requests — and which one.
+ */
+export function infoMatcherPrompt(tickets: PendingInfoTicket[]): string {
+  const list = tickets
+    .map(
+      (tk) =>
+        `- Ticket #${tk.number}: "${tk.title}". Question asked: ${
+          tk.infoQuestion ? `"${tk.infoQuestion}"` : '(generic request for more details)'
+        }`,
+    )
+    .join('\n');
+  return `You are a classifier for "Vivo Assistant". The support team asked this user for more information about the following ticket(s), and the user just sent a new Slack message. Decide if that message ANSWERS one of the pending questions.
+
+PENDING INFO REQUESTS:
+${list}
+
+OUTPUT RULES:
+- Output ONLY one JSON object. No markdown, no explanations.
+- {"verdict":"answer","ticketNumber":<N>} — the message clearly provides the information asked for ticket N (content matches that ticket's topic/question).
+- {"verdict":"ambiguous"} — the message is clearly an answer with requested information, but it could belong to MORE THAN ONE of the pending tickets and nothing disambiguates.
+- {"verdict":"unrelated"} — the message is anything else: a greeting, smalltalk, a NEW problem report, a request to open a ticket, a question about their calendar/files/tasks, or a question about ticket status.
+
+GUIDANCE:
+- A mention like "#5", "ticket 5" or "para el ticket 5" pointing at a pending ticket is a direct answer to that ticket.
+- Messages that only say "hola", "quiero abrir un ticket", "cómo va mi ticket?" are unrelated.
+- If there is exactly one pending ticket, prefer "answer" over "ambiguous" whenever the content plausibly addresses its question; use "unrelated" if it clearly does not.`;
+}
+
 export interface ChatUserContext {
   name?: string | null;
   googleConnected: boolean;
