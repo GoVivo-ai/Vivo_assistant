@@ -11,13 +11,16 @@ import { handleClickUpCallback } from './oauth/clickupOAuth';
 import { adminShell, loginPage, logomarkSvg, publicPage } from './admin/ui';
 import {
   countTicketsByStatus,
+  createTicketForEmail,
   getTicket,
   getTicketAttachment,
   listTickets,
   requestTicketInfo,
   updateTicket,
+  TICKET_CATEGORIES,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
+  type TicketCategory,
   type TicketPriority,
   type TicketStatus,
 } from './services/ticketService';
@@ -700,6 +703,46 @@ export function registerOAuthRoutes(router: IRouter): void {
           id: null,
         });
       }
+    }
+  });
+
+  // Ticket intake from external surfaces (MarTech's Support form).
+  // Auth: same Bearer <ADMIN_DASHBOARD_KEY> as /mcp. The reporter is resolved
+  // by email against the Slack roster, so updates keep flowing via Slack DM.
+  router.post('/api/tickets', express.json({ limit: '100kb' }), async (req: Request, res: Response) => {
+    const key = env.ADMIN_DASHBOARD_KEY;
+    const provided = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const a = Buffer.from(provided);
+    const b = Buffer.from(key ?? '');
+    if (!key || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const email = String(body.email ?? '').trim();
+    const title = String(body.title ?? '').trim();
+    const description = String(body.description ?? '').trim();
+    if (!email || !title || !description) {
+      res.status(400).json({ error: 'email, title and description are required' });
+      return;
+    }
+    const category = TICKET_CATEGORIES.includes(body.category as TicketCategory)
+      ? (body.category as TicketCategory)
+      : 'other';
+    const priority = TICKET_PRIORITIES.includes(body.priority as TicketPriority)
+      ? (body.priority as TicketPriority)
+      : 'medium';
+    const lang = body.lang === 'en' ? 'en' : 'es';
+    try {
+      const result = await createTicketForEmail({ email, title, description, category, priority, lang });
+      if (!result.ok) {
+        res.status(404).json({ error: result.error });
+        return;
+      }
+      res.status(201).json({ ok: true, number: result.number });
+    } catch (err) {
+      console.error('[api/tickets] create failed:', (err as Error).message);
+      res.status(500).json({ error: 'internal' });
     }
   });
 

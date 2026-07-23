@@ -16,6 +16,15 @@ export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 
 export const TICKET_STATUSES: TicketStatus[] = ['open', 'in_progress', 'resolved', 'closed'];
 export const TICKET_PRIORITIES: TicketPriority[] = ['urgent', 'high', 'medium', 'low'];
+export const TICKET_CATEGORIES: TicketCategory[] = [
+  'access',
+  'bug',
+  'data',
+  'performance',
+  'integration',
+  'feature_request',
+  'other',
+];
 
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 4000;
@@ -38,6 +47,56 @@ export async function createTicket(input: {
       lang: input.lang,
     },
   });
+}
+
+/**
+ * Ticket intake for external surfaces (e.g. MarTech's Support form): resolves
+ * the reporter by email against the Slack-synced roster, creates the ticket
+ * and DMs them the confirmation so the conversation continues in Slack as
+ * with any other ticket.
+ */
+export async function createTicketForEmail(input: {
+  email: string;
+  title: string;
+  description: string;
+  category: TicketCategory;
+  priority: TicketPriority;
+  lang: 'es' | 'en';
+}): Promise<{ ok: true; number: number } | { ok: false; error: 'user_not_found' }> {
+  const email = input.email.toLowerCase().trim();
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+    select: { id: true, slackUserId: true },
+  });
+  if (!user) return { ok: false, error: 'user_not_found' };
+  const ticket = await createTicket({
+    userId: user.id,
+    title: input.title,
+    description: input.description,
+    category: input.category,
+    priority: input.priority,
+    lang: input.lang,
+  });
+  void notifyTicketCreated(user.slackUserId, ticket.number, ticket.title, input.lang);
+  return { ok: true, number: ticket.number };
+}
+
+/** DMs the user that a ticket was opened on their behalf (best-effort). */
+async function notifyTicketCreated(
+  slackUserId: string,
+  number: number,
+  title: string,
+  lang: 'es' | 'en',
+): Promise<void> {
+  const text =
+    lang === 'es'
+      ? `🎫 Recibí tu ticket *#${number}* — _${title}_ — desde el formulario de MarTech. Te aviso por aquí cuando haya novedades. 🙌`
+      : `🎫 I received your ticket *#${number}* — _${title}_ — from the MarTech form. I will keep you posted here. 🙌`;
+  try {
+    await dmUser(slackUserId, text);
+  } catch (err) {
+    console.error('[tickets] failed to confirm ticket creation:', (err as Error).message);
+  }
 }
 
 /** Tickets the user would ask about in chat: anything not closed, plus recently resolved. */
